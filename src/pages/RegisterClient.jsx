@@ -27,18 +27,13 @@ export function RegisterClient() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const { data, error: authErr } = await supabase.auth.signUp({ email: form.email, password: form.password })
-    if (authErr) { setError(authErr.message); setLoading(false); return }
-
-    const { error: dbErr } = await supabase.from('users').insert({
-      id: data.user.id,
-      nome: form.nome,
+    const { error: authErr } = await supabase.auth.signUp({
       email: form.email,
-      telefone: form.telefone,
-      tipo: 'cliente',
+      password: form.password,
+      options: { data: { nome: form.nome, telefone: form.telefone, tipo: 'cliente' } },
     })
     setLoading(false)
-    if (dbErr) { setError(dbErr.message); return }
+    if (authErr) { setError(authErr.message); return }
     navigate('/mapa', { replace: true })
   }
 

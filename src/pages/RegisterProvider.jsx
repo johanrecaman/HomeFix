@@ -36,17 +36,12 @@ export function RegisterProvider() {
     setError('')
     setLoading(true)
 
-    const { data, error: authErr } = await supabase.auth.signUp({ email: form.email, password: form.password })
-    if (authErr) { setError(authErr.message); setLoading(false); return }
-
-    const { error: userErr } = await supabase.from('users').insert({
-      id: data.user.id,
-      nome: form.nome,
+    const { data, error: authErr } = await supabase.auth.signUp({
       email: form.email,
-      telefone: form.telefone,
-      tipo: 'prestador',
+      password: form.password,
+      options: { data: { nome: form.nome, telefone: form.telefone, tipo: 'prestador' } },
     })
-    if (userErr) { setError(userErr.message); setLoading(false); return }
+    if (authErr) { setError(authErr.message); setLoading(false); return }
 
     const { error: provErr } = await supabase.from('prestadores').insert({
       user_id: data.user.id,
