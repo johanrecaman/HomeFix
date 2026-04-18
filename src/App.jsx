@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
+import { LandingPage } from './pages/LandingPage'
 import { Entry } from './pages/Entry'
 import { Login } from './pages/Login'
 import { RegisterClient } from './pages/RegisterClient'
@@ -11,7 +12,7 @@ import { NotFound } from './pages/NotFound'
 function PrivateRoute({ children, requiredType }) {
   const { profile, loading } = useAuth()
   if (loading) return (
-    <div className="h-screen grid place-items-center">
+    <div className="h-screen grid place-items-center" style={{ background: 'var(--bg)' }}>
       <span className="w-8 h-8 border-4 border-teal-400 border-t-transparent rounded-full animate-spin"/>
     </div>
   )
@@ -23,7 +24,8 @@ function PrivateRoute({ children, requiredType }) {
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Entry/>}/>
+      <Route path="/" element={<LandingPage/>}/>
+      <Route path="/entrar" element={<Entry/>}/>
       <Route path="/login" element={<Login/>}/>
       <Route path="/cadastro/cliente" element={<RegisterClient/>}/>
       <Route path="/cadastro/prestador" element={<RegisterProvider/>}/>
