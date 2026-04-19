@@ -6,6 +6,7 @@ import { Login } from './pages/Login'
 import { RegisterClient } from './pages/RegisterClient'
 import { RegisterProvider } from './pages/RegisterProvider'
 import { ClientMap } from './pages/ClientMap'
+import { ClientDashboard } from './pages/ClientDashboard'
 import { ProviderDashboard } from './pages/ProviderDashboard'
 import { AdminDashboard } from './pages/AdminDashboard'
 import { NotFound } from './pages/NotFound'
@@ -44,6 +45,7 @@ export default function App() {
       <Route path="/cadastro/cliente" element={<RegisterClient/>}/>
       <Route path="/cadastro/prestador" element={<RegisterProvider/>}/>
       <Route path="/mapa" element={<PrivateRoute requiredType="cliente"><ClientMap/></PrivateRoute>}/>
+      <Route path="/cliente" element={<PrivateRoute requiredType="cliente"><ClientDashboard/></PrivateRoute>}/>
       <Route path="/dashboard" element={<PrivateRoute requiredType="prestador"><ProviderDashboard/></PrivateRoute>}/>
       <Route path="/admin" element={<AdminRoute><AdminDashboard/></AdminRoute>}/>
       <Route path="*" element={<NotFound/>}/>
