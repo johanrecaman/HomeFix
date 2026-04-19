@@ -32,6 +32,9 @@ export function AdminDashboard() {
   useEffect(() => {
     fetchAllProviders().then(data => {
       setProviders(data)
+    }).catch(() => {
+      setProviders([])
+    }).finally(() => {
       setLoading(false)
     })
   }, [])

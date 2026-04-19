@@ -24,7 +24,8 @@ END $$;
 
 -- 5. Helper function: bypasses RLS to check is_admin (breaks recursion)
 CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER AS $$
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public, pg_catalog AS $$
   SELECT COALESCE(is_admin, false) FROM public.users WHERE id = auth.uid();
 $$;
 
@@ -45,7 +46,8 @@ CREATE POLICY "Admin reads all providers"
 -- Admin pode editar qualquer prestador (ban/unban, avaliacao)
 CREATE POLICY "Admin updates any provider"
   ON public.prestadores FOR UPDATE
-  USING ( public.is_admin() );
+  USING ( public.is_admin() )
+  WITH CHECK (true);
 
 -- Admin pode ler todos os perfis de usuário
 CREATE POLICY "Admin reads all users"
@@ -55,4 +57,5 @@ CREATE POLICY "Admin reads all users"
 -- Admin pode atualizar qualquer perfil de usuário
 CREATE POLICY "Admin updates any user"
   ON public.users FOR UPDATE
-  USING ( public.is_admin() );
+  USING ( public.is_admin() )
+  WITH CHECK (true);

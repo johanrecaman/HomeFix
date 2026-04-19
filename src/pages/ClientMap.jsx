@@ -133,6 +133,9 @@ export function ClientMap() {
 
     fetchOnlineProviders().then(data => {
       setProviders(data)
+    }).catch(() => {
+      setProviders([])
+    }).finally(() => {
       setLoadingProviders(false)
     })
 
@@ -154,7 +157,7 @@ export function ClientMap() {
   }, [])
 
   useEffect(() => {
-    if (!mapRef.current || providers.length === 0) return
+    if (!mapRef.current || !isLoaded || providers.length === 0) return
     if (providers.length === 1) {
       mapRef.current.setCenter({ lat: providers[0].latitude, lng: providers[0].longitude })
       mapRef.current.setZoom(14)

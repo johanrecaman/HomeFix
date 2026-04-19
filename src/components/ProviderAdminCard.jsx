@@ -10,18 +10,24 @@ const STATUS_LABEL = {
 
 export function ProviderAdminCard({ provider, onUpdate }) {
   const [loading, setLoading] = useState(false)
+  const [banError, setBanError] = useState('')
   const isBanned = provider.approval_status === 'banned'
   const statusInfo = STATUS_LABEL[provider.status] || STATUS_LABEL.offline
 
   async function toggleBan() {
     setLoading(true)
+    setBanError('')
     const newStatus = isBanned ? 'active' : 'banned'
     const { error } = await supabase
       .from('prestadores')
       .update({ approval_status: newStatus })
       .eq('user_id', provider.user_id)
     setLoading(false)
-    if (!error) onUpdate(provider.user_id, newStatus)
+    if (error) {
+      setBanError('Erro ao atualizar. Tente novamente.')
+    } else {
+      onUpdate(provider.user_id, newStatus)
+    }
   }
 
   return (
@@ -67,6 +73,9 @@ export function ProviderAdminCard({ provider, onUpdate }) {
           </button>
         </div>
       </div>
+      {banError && (
+        <p className="text-xs text-red-500 mt-2 text-right">{banError}</p>
+      )}
     </div>
   )
 }

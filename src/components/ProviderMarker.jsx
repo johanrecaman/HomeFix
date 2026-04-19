@@ -2,8 +2,20 @@ import { MarkerF } from '@react-google-maps/api'
 
 function buildIcon(fotoUrl, nome) {
   if (fotoUrl) {
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="44" height="44">
+        <defs>
+          <clipPath id="circle-clip">
+            <circle cx="22" cy="22" r="19"/>
+          </clipPath>
+        </defs>
+        <circle cx="22" cy="22" r="21" fill="white"/>
+        <image href="${fotoUrl}" x="3" y="3" width="38" height="38" clip-path="url(#circle-clip)" preserveAspectRatio="xMidYMid slice"/>
+        <circle cx="22" cy="22" r="21" fill="none" stroke="white" stroke-width="3"/>
+      </svg>
+    `
     return {
-      url: fotoUrl,
+      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
       scaledSize: new window.google.maps.Size(44, 44),
       anchor: new window.google.maps.Point(22, 22),
     }
