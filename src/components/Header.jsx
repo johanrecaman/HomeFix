@@ -22,15 +22,15 @@ export function Header() {
           {profile ? (
             <>
               <span className="hidden md:block text-sm text-ink-600 dark:text-ink-400 font-medium">{profile.nome}</span>
-              {!profile.is_admin && profile.tipo === 'cliente' && (
+              {profile.tipo !== 'admin' && profile.tipo === 'cliente' && (
                 <Button variant="ghost" size="sm" onClick={() => navigate('/cliente')}>Minha conta</Button>
               )}
               <Button variant="ghost" size="sm" onClick={handleSignOut}>Sair</Button>
               <Button size="sm" onClick={() => navigate(
-                profile.is_admin ? '/admin' :
+                profile.tipo === 'admin' ? '/admin' :
                 profile.tipo === 'prestador' ? '/dashboard' : '/mapa'
               )}>
-                {profile.is_admin ? 'Painel Admin' : profile.tipo === 'prestador' ? 'Dashboard' : 'Buscar'}
+                {profile.tipo === 'admin' ? 'Painel Admin' : profile.tipo === 'prestador' ? 'Dashboard' : 'Buscar'}
               </Button>
             </>
           ) : (
