@@ -47,7 +47,12 @@ AS $$
       ST_MakePoint(p.longitude, p.latitude)::geography,
       ST_MakePoint(lng, lat)::geography,
       radius_km * 1000
-    );
+    )
+  LIMIT 100;
 $$;
 
 GRANT EXECUTE ON FUNCTION get_nearby_providers TO authenticated;
+
+-- Spatial index for ST_DWithin performance
+CREATE INDEX IF NOT EXISTS idx_prestadores_location
+  ON prestadores USING GIST (ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography);
