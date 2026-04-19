@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { useLocationSync } from '../hooks/useLocationSync'
 import { Header } from '../components/Header'
 import { Button } from '../components/Button'
 import { SlotManager } from '../components/SlotManager'
@@ -70,6 +71,9 @@ export function ProviderDashboard() {
   const [toggling, setToggling] = useState(false)
   const [gpsError, setGpsError] = useState('')
 
+  const isOnline = status === 'online'
+  useLocationSync(isOnline, profile?.id)
+
   useEffect(() => {
     if (!profile) return
     supabase.from('prestadores').select('status').eq('user_id', profile.id).single()
@@ -100,34 +104,42 @@ export function ProviderDashboard() {
     setToggling(true)
     setGpsError('')
     const newStatus = status === 'online' ? 'offline' : 'online'
-    const updateData = { status: newStatus }
 
     if (newStatus === 'online') {
       try {
-        const coords = await getGPSCoords()
-        updateData.latitude = coords.lat
-        updateData.longitude = coords.lng
-        updateData.updated_at = new Date().toISOString()
+        const { lat, lng } = await getGPSCoords()
+        await supabase.from('prestadores').update({
+          status: 'online',
+          is_online: true,
+          latitude: lat,
+          longitude: lng,
+          last_location: `SRID=4326;POINT(${lng} ${lat})`,
+        }).eq('user_id', profile.id)
       } catch {
         setGpsError('GPS negado — ficando online sem localização exata')
+        await supabase.from('prestadores').update({
+          status: 'online',
+          is_online: true,
+        }).eq('user_id', profile.id)
       }
+    } else {
+      await supabase.from('prestadores').update({ status: 'offline', is_online: false }).eq('user_id', profile.id)
     }
 
-    await supabase.from('prestadores').update(updateData).eq('user_id', profile.id)
     setStatus(newStatus)
     setToggling(false)
   }
 
   async function setAlertMode() {
     if (!profile) return
-    await supabase.from('prestadores').update({ status: 'alerta' }).eq('user_id', profile.id)
+    await supabase.from('prestadores').update({ status: 'alerta', is_online: false }).eq('user_id', profile.id)
     setStatus('alerta')
   }
 
   async function acceptAlertAndGoOnline() {
     if (!profile) return
     setToggling(true)
-    const updateData = { status: 'online', updated_at: new Date().toISOString() }
+    const updateData = { status: 'online', is_online: true, updated_at: new Date().toISOString() }
     try {
       const coords = await getGPSCoords()
       updateData.latitude = coords.lat
@@ -140,7 +152,7 @@ export function ProviderDashboard() {
 
   async function deactivateAlert() {
     if (!profile) return
-    await supabase.from('prestadores').update({ status: 'offline' }).eq('user_id', profile.id)
+    await supabase.from('prestadores').update({ status: 'offline', is_online: false }).eq('user_id', profile.id)
     setStatus('offline')
   }
 
