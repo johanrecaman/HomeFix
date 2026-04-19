@@ -12,10 +12,13 @@ CREATE TABLE IF NOT EXISTS public.slots (
 
 CREATE INDEX IF NOT EXISTS slots_prestador_idx ON public.slots (prestador_id);
 CREATE INDEX IF NOT EXISTS slots_starts_at_idx ON public.slots (starts_at);
+CREATE INDEX IF NOT EXISTS slots_prestador_time_idx ON public.slots (prestador_id, starts_at, ends_at);
 
 -- ── 2. Add slot_id to solicitacoes ─────────────────────────────────────────
 ALTER TABLE public.solicitacoes
   ADD COLUMN IF NOT EXISTS slot_id uuid REFERENCES public.slots(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS solicitacoes_slot_id_idx ON public.solicitacoes (slot_id);
 
 -- ── 3. RLS for slots ───────────────────────────────────────────────────────
 ALTER TABLE public.slots ENABLE ROW LEVEL SECURITY;
@@ -28,7 +31,7 @@ CREATE POLICY "provider reads own slots"
 -- Clients can read free slots (to check availability)
 CREATE POLICY "client reads free slots"
   ON public.slots FOR SELECT
-  USING (status = 'free');
+  USING (status = 'free' AND auth.uid() IS NOT NULL);
 
 -- Providers can insert their own slots
 CREATE POLICY "provider inserts own slots"
@@ -50,7 +53,7 @@ CREATE POLICY "provider updates own slot status"
 CREATE OR REPLACE FUNCTION get_nearby_providers_with_availability(
   lat         double precision,
   lng         double precision,
-  radius_km   integer,
+  radius_km   double precision,
   desired_at  timestamptz
 )
 RETURNS TABLE (
@@ -73,6 +76,7 @@ RETURNS TABLE (
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
+SET search_path = public, pg_temp
 AS $$
   SELECT DISTINCT ON (p.user_id)
     p.user_id,
