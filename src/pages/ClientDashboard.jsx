@@ -15,9 +15,10 @@ const STATUS_STYLES = {
   pendente:  { label: 'Pendente',  bg: 'bg-amber-50 dark:bg-amber-400/10',  text: 'text-amber-700 dark:text-amber-300',  dot: 'bg-amber-400' },
   aceita:    { label: 'Aceita',    bg: 'bg-teal-50 dark:bg-teal-400/10',    text: 'text-teal-700 dark:text-teal-300',    dot: 'bg-teal-400' },
   recusada:  { label: 'Recusada', bg: 'bg-red-50 dark:bg-red-500/10',      text: 'text-red-600 dark:text-red-400',      dot: 'bg-red-500' },
+  cancelada: { label: 'Cancelado', bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-600 dark:text-gray-400', dot: 'bg-gray-500' },
 }
 
-function ProposalCard({ proposal }) {
+function ProposalCard({ proposal, onCancel }) {
   const s = STATUS_STYLES[proposal.status] || STATUS_STYLES.pendente
   const date = new Date(proposal.data_desejada)
   return (
@@ -39,6 +40,26 @@ function ProposalCard({ proposal }) {
           Valor oferecido: <span className="font-bold text-teal-600 dark:text-teal-400">R$ {Number(proposal.valor_oferecido).toFixed(2)}</span>
         </p>
       )}
+      {proposal.status === 'pendente' && onCancel && (
+        <button
+          onClick={() => onCancel(proposal.id)}
+          className="mt-2 text-xs text-red-500 border border-red-300 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg px-3 py-1.5 transition"
+        >
+          Cancelar solicitação
+        </button>
+      )}
+      {proposal.status === 'aceita' && onCancel && (
+        <button
+          onClick={() => {
+            if (window.confirm('Este serviço já foi aceito pelo prestador. Deseja cancelar mesmo assim?')) {
+              onCancel(proposal.id)
+            }
+          }}
+          className="mt-2 text-xs text-red-500 border border-red-300 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg px-3 py-1.5 transition"
+        >
+          Cancelar serviço
+        </button>
+      )}
     </div>
   )
 }
@@ -48,21 +69,29 @@ function PropostasTab({ clientId }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    supabase
+  async function fetchPropostas() {
+    setLoading(true)
+    const { data, error: err } = await supabase
       .from('solicitacoes')
       .select('*')
       .eq('cliente_id', clientId)
       .in('status', ['pendente'])
       .order('created_at', { ascending: false })
-      .then(({ data, error: err }) => {
-        if (err) {
-          setError(err.message)
-        } else {
-          setProposals(data || [])
-        }
-        setLoading(false)
-      })
+    if (err) {
+      setError(err.message)
+    } else {
+      setProposals(data || [])
+    }
+    setLoading(false)
+  }
+
+  async function handleCancel(id) {
+    await supabase.from('solicitacoes').update({ status: 'cancelada' }).eq('id', id)
+    fetchPropostas()
+  }
+
+  useEffect(() => {
+    fetchPropostas()
   }, [clientId])
 
   if (loading) return (
@@ -88,7 +117,7 @@ function PropostasTab({ clientId }) {
 
   return (
     <div className="flex flex-col gap-3">
-      {proposals.map(p => <ProposalCard key={p.id} proposal={p}/>)}
+      {proposals.map(p => <ProposalCard key={p.id} proposal={p} onCancel={handleCancel}/>)}
     </div>
   )
 }
@@ -98,21 +127,29 @@ function HistoricoTab({ clientId }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    supabase
+  async function fetchHistorico() {
+    setLoading(true)
+    const { data, error: err } = await supabase
       .from('solicitacoes')
       .select('*')
       .eq('cliente_id', clientId)
-      .in('status', ['aceita', 'recusada'])
+      .in('status', ['aceita', 'recusada', 'cancelada'])
       .order('created_at', { ascending: false })
-      .then(({ data, error: err }) => {
-        if (err) {
-          setError(err.message)
-        } else {
-          setHistory(data || [])
-        }
-        setLoading(false)
-      })
+    if (err) {
+      setError(err.message)
+    } else {
+      setHistory(data || [])
+    }
+    setLoading(false)
+  }
+
+  async function handleCancel(id) {
+    await supabase.from('solicitacoes').update({ status: 'cancelada' }).eq('id', id)
+    fetchHistorico()
+  }
+
+  useEffect(() => {
+    fetchHistorico()
   }, [clientId])
 
   if (loading) return (
@@ -137,7 +174,7 @@ function HistoricoTab({ clientId }) {
 
   return (
     <div className="flex flex-col gap-3">
-      {history.map(p => <ProposalCard key={p.id} proposal={p}/>)}
+      {history.map(p => <ProposalCard key={p.id} proposal={p} onCancel={handleCancel}/>)}
     </div>
   )
 }
