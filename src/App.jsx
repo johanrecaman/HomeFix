@@ -7,6 +7,7 @@ import { RegisterClient } from './pages/RegisterClient'
 import { RegisterProvider } from './pages/RegisterProvider'
 import { ClientMap } from './pages/ClientMap'
 import { ProviderDashboard } from './pages/ProviderDashboard'
+import { AdminDashboard } from './pages/AdminDashboard'
 import { NotFound } from './pages/NotFound'
 
 function PrivateRoute({ children, requiredType }) {
@@ -21,6 +22,18 @@ function PrivateRoute({ children, requiredType }) {
   return children
 }
 
+function AdminRoute({ children }) {
+  const { profile, loading } = useAuth()
+  if (loading) return (
+    <div className="h-screen grid place-items-center" style={{ background: 'var(--bg)' }}>
+      <span className="w-8 h-8 border-4 border-teal-400 border-t-transparent rounded-full animate-spin"/>
+    </div>
+  )
+  if (!profile) return <Navigate to="/login" replace/>
+  if (!profile.is_admin) return <Navigate to="/" replace/>
+  return children
+}
+
 export default function App() {
   return (
     <Routes>
@@ -31,6 +44,7 @@ export default function App() {
       <Route path="/cadastro/prestador" element={<RegisterProvider/>}/>
       <Route path="/mapa" element={<PrivateRoute requiredType="cliente"><ClientMap/></PrivateRoute>}/>
       <Route path="/dashboard" element={<PrivateRoute requiredType="prestador"><ProviderDashboard/></PrivateRoute>}/>
+      <Route path="/admin" element={<AdminRoute><AdminDashboard/></AdminRoute>}/>
       <Route path="*" element={<NotFound/>}/>
     </Routes>
   )
