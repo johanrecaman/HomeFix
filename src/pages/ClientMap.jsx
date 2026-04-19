@@ -98,18 +98,33 @@ function SolicitacaoModal({ provider, clientId, onClose, onSent }) {
   )
 }
 
-async function fetchNearbyProviders(lat, lng, radiusKm = 10) {
-  const { data } = await supabase.rpc('get_nearby_providers', {
-    lat, lng, radius_km: radiusKm,
+async function fetchNearbyProviders(lat, lng, radiusKm = 10, filters = {}) {
+  const { filterCategoria, minRate, maxRate } = filters
+  const { data, error } = await supabase.rpc('get_nearby_providers', {
+    lat,
+    lng,
+    radius_km: radiusKm,
+    filter_categoria: filterCategoria || null,
+    min_hourly_rate: minRate ? parseFloat(minRate) : null,
+    max_hourly_rate: maxRate ? parseFloat(maxRate) : null,
   })
-  return (data || []).map(p => ({ ...p, foto_url: p.user_foto_url }))
+  if (error) { console.error(error); return [] }
+  return (data || []).map(p => ({ ...p, foto_url: p.foto_url ?? p.user_foto_url }))
 }
 
-async function fetchProvidersWithAvailability(lat, lng, radiusKm, desiredAt) {
-  const { data } = await supabase.rpc('get_nearby_providers_with_availability', {
-    lat, lng, radius_km: radiusKm, desired_at: new Date(desiredAt).toISOString(),
+async function fetchProvidersWithAvailability(lat, lng, radiusKm, desiredAt, filters = {}) {
+  const { filterCategoria, minRate, maxRate } = filters
+  const { data, error } = await supabase.rpc('get_nearby_providers_with_availability', {
+    lat,
+    lng,
+    radius_km: radiusKm,
+    desired_at: new Date(desiredAt).toISOString(),
+    filter_categoria: filterCategoria || null,
+    min_hourly_rate: minRate ? parseFloat(minRate) : null,
+    max_hourly_rate: maxRate ? parseFloat(maxRate) : null,
   })
-  return (data || []).map(p => ({ ...p, foto_url: p.user_foto_url }))
+  if (error) { console.error(error); return [] }
+  return (data || []).map(p => ({ ...p, foto_url: p.foto_url ?? p.user_foto_url }))
 }
 
 function MapContent({ userLocation }) {
@@ -127,13 +142,31 @@ function MapContent({ userLocation }) {
   const [sent, setSent] = useState(false)
   const [radius, setRadius] = useState(10)
   const [dateFilter, setDateFilter] = useState('')
+  const [categorias, setCategorias] = useState([])
+  const [filterCategoria, setFilterCategoria] = useState('')
+  const [minRate, setMinRate] = useState('')
+  const [maxRate, setMaxRate] = useState('')
 
-  const loadProviders = useCallback(async (lat, lng, r, dt) => {
+  // Fetch distinct categories once on mount
+  useEffect(() => {
+    supabase
+      .from('prestadores')
+      .select('categoria')
+      .eq('approval_status', 'active')
+      .then(({ data }) => {
+        const unique = [
+          ...new Set((data || []).map((r) => r.categoria).filter(Boolean)),
+        ].sort()
+        setCategorias(unique)
+      })
+  }, [])
+
+  const loadProviders = useCallback(async (lat, lng, r, dt, filters) => {
     setLoadingProviders(true)
     try {
       const data = dt
-        ? await fetchProvidersWithAvailability(lat, lng, r, dt)
-        : await fetchNearbyProviders(lat, lng, r)
+        ? await fetchProvidersWithAvailability(lat, lng, r, dt, filters)
+        : await fetchNearbyProviders(lat, lng, r, filters)
       setProviders(data)
     } catch {
       setProviders([])
@@ -147,11 +180,11 @@ function MapContent({ userLocation }) {
 
   // Initial load + realtime channel
   useEffect(() => {
-    loadProviders(userLocation.lat, userLocation.lng, radiusRef.current)
+    loadProviders(userLocation.lat, userLocation.lng, radiusRef.current, '', { filterCategoria, minRate, maxRate })
 
     const channel = supabase.channel('map-providers')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'prestadores' }, () => {
-        fetchNearbyProviders(userLocation.lat, userLocation.lng, radiusRef.current).then(data => {
+        fetchNearbyProviders(userLocation.lat, userLocation.lng, radiusRef.current, { filterCategoria, minRate, maxRate }).then(data => {
           setProviders(data)
           setInfoOpen(prev => prev && data.find(p => p.user_id === prev.user_id) ? prev : null)
           setSelected(prev => prev && data.find(p => p.user_id === prev.user_id) ? prev : null)
@@ -160,17 +193,18 @@ function MapContent({ userLocation }) {
       .subscribe()
 
     return () => supabase.removeChannel(channel)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLocation, loadProviders])
 
-  // Radius/dateFilter debounce — skip on initial mount (initial load handles the first fetch)
+  // Radius/dateFilter/category/rate debounce — skip on initial mount (initial load handles the first fetch)
   useEffect(() => {
     if (isInitialMount.current) { isInitialMount.current = false; return }
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
-      loadProviders(userLocation.lat, userLocation.lng, radius, dateFilter)
+      loadProviders(userLocation.lat, userLocation.lng, radius, dateFilter, { filterCategoria, minRate, maxRate })
     }, 500)
     return () => clearTimeout(debounceRef.current)
-  }, [radius, dateFilter, userLocation, loadProviders])
+  }, [radius, dateFilter, filterCategoria, minRate, maxRate, userLocation, loadProviders])
 
   const onMapLoad = useCallback((map) => {
     mapRef.current = map
@@ -227,6 +261,7 @@ function MapContent({ userLocation }) {
                 provider={p}
                 onClick={handleMarkerClick}
                 isSelected={selected?.user_id === p.user_id}
+                isOnline={p.is_online ?? true}
               />
             ))}
             {infoOpen && (
@@ -267,6 +302,48 @@ function MapContent({ userLocation }) {
             onChange={v => setDateFilter(v)}
             onClear={() => setDateFilter('')}
           />
+
+          {/* Category filter */}
+          <div className="mt-3">
+            <label className="text-xs font-medium text-[var(--text-600)] block mb-1">
+              Categoria
+            </label>
+            <select
+              value={filterCategoria}
+              onChange={(e) => setFilterCategoria(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-[#08141A] dark:border-gray-600 dark:text-white"
+            >
+              <option value="">Todas</option>
+              {categorias.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Hourly rate range */}
+          <div className="mt-3">
+            <label className="text-xs font-medium text-[var(--text-600)] block mb-1">
+              Valor/hora (R$)
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                min="0"
+                placeholder="Mín"
+                value={minRate}
+                onChange={(e) => setMinRate(e.target.value)}
+                className="w-1/2 border rounded-lg px-2 py-2 text-sm dark:bg-[#08141A] dark:border-gray-600 dark:text-white"
+              />
+              <input
+                type="number"
+                min="0"
+                placeholder="Máx"
+                value={maxRate}
+                onChange={(e) => setMaxRate(e.target.value)}
+                className="w-1/2 border rounded-lg px-2 py-2 text-sm dark:bg-[#08141A] dark:border-gray-600 dark:text-white"
+              />
+            </div>
+          </div>
         </div>
 
         {selected && (
