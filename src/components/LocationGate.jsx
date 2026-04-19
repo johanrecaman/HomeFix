@@ -54,5 +54,6 @@ export function LocationGate({ children }) {
     )
   }
 
+  if (!coords) return null
   return children(coords)
 }
