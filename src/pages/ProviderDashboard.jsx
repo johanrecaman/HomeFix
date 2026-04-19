@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useLocationSync } from '../hooks/useLocationSync'
 import { Header } from '../components/Header'
 import { Button } from '../components/Button'
-import { SlotManager } from '../components/SlotManager'
+import AgendaCalendar from '../components/AgendaCalendar'
 import { MapPin, Bell, CheckCircle, XCircle, AlertTriangle, Wifi } from 'lucide-react'
 
 function getGPSCoords() {
@@ -266,7 +266,7 @@ export function ProviderDashboard() {
         )}
 
         {tab === 'agenda' && (
-          <SlotManager prestadorId={profile.id}/>
+          <AgendaCalendar prestadorId={profile.id} />
         )}
       </div>
     </div>
