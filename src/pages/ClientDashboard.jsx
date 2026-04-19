@@ -46,6 +46,7 @@ function ProposalCard({ proposal }) {
 function PropostasTab({ clientId }) {
   const [proposals, setProposals] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     supabase
@@ -54,12 +55,26 @@ function PropostasTab({ clientId }) {
       .eq('cliente_id', clientId)
       .in('status', ['pendente'])
       .order('created_at', { ascending: false })
-      .then(({ data }) => { setProposals(data || []); setLoading(false) })
+      .then(({ data, error: err }) => {
+        if (err) {
+          setError(err.message)
+        } else {
+          setProposals(data || [])
+        }
+        setLoading(false)
+      })
   }, [clientId])
 
   if (loading) return (
     <div className="flex flex-col gap-3">
       {[1, 2, 3].map(i => <div key={i} className="h-24 rounded-xl bg-ink-900/5 dark:bg-white/5 animate-pulse"/>)}
+    </div>
+  )
+
+  if (error) return (
+    <div className="text-center py-16 text-red-500">
+      <p className="font-medium text-sm">Erro ao carregar propostas</p>
+      <p className="text-xs mt-1">{error}</p>
     </div>
   )
 
@@ -81,6 +96,7 @@ function PropostasTab({ clientId }) {
 function HistoricoTab({ clientId }) {
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     supabase
@@ -89,12 +105,26 @@ function HistoricoTab({ clientId }) {
       .eq('cliente_id', clientId)
       .in('status', ['aceita', 'recusada'])
       .order('created_at', { ascending: false })
-      .then(({ data }) => { setHistory(data || []); setLoading(false) })
+      .then(({ data, error: err }) => {
+        if (err) {
+          setError(err.message)
+        } else {
+          setHistory(data || [])
+        }
+        setLoading(false)
+      })
   }, [clientId])
 
   if (loading) return (
     <div className="flex flex-col gap-3">
       {[1, 2].map(i => <div key={i} className="h-24 rounded-xl bg-ink-900/5 dark:bg-white/5 animate-pulse"/>)}
+    </div>
+  )
+
+  if (error) return (
+    <div className="text-center py-16 text-red-500">
+      <p className="font-medium text-sm">Erro ao carregar histórico</p>
+      <p className="text-xs mt-1">{error}</p>
     </div>
   )
 
