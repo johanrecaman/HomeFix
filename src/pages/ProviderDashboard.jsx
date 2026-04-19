@@ -5,6 +5,7 @@ import { useLocationSync } from '../hooks/useLocationSync'
 import { Header } from '../components/Header'
 import { Button } from '../components/Button'
 import AgendaCalendar from '../components/AgendaCalendar'
+import FlashAlert from '../components/FlashAlert'
 import { MapPin, Bell, CheckCircle, XCircle, AlertTriangle, Wifi } from 'lucide-react'
 
 function getGPSCoords() {
@@ -70,6 +71,18 @@ export function ProviderDashboard() {
   const [proposals, setProposals] = useState([])
   const [toggling, setToggling] = useState(false)
   const [gpsError, setGpsError] = useState('')
+
+  const [prestadorRow, setPrestadorRow] = useState(null)
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    supabase
+      .from('prestadores')
+      .select('categoria, hourly_rate, latitude, longitude')
+      .eq('user_id', profile.id)
+      .single()
+      .then(({ data }) => setPrestadorRow(data));
+  }, [profile?.id]);
 
   const isOnline = status === 'online'
   useLocationSync(isOnline, profile?.id)
@@ -167,6 +180,11 @@ export function ProviderDashboard() {
   }
 
   const pendingCount = proposals.filter(p => p.status === 'pendente').length
+
+  const prestadorForAlert = {
+    user_id: profile?.id,
+    ...(prestadorRow ?? {}),
+  }
 
   return (
     <div className="min-h-screen bg-[#FAF8F3] dark:bg-[#08141A]">
@@ -269,6 +287,9 @@ export function ProviderDashboard() {
           <AgendaCalendar prestadorId={profile.id} />
         )}
       </div>
+      {status === 'online' && profile?.id && (
+        <FlashAlert prestador={prestadorForAlert} />
+      )}
     </div>
   )
 }
