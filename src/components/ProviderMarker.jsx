@@ -1,6 +1,8 @@
 import { MarkerF } from '@react-google-maps/api'
 
-function buildIcon(fotoUrl, nome) {
+function buildIcon(fotoUrl, nome, isOnline) {
+  const borderColor = isOnline ? '#2dd4bf' : '#6b7280'
+
   if (fotoUrl) {
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="44" height="44">
@@ -11,7 +13,7 @@ function buildIcon(fotoUrl, nome) {
         </defs>
         <circle cx="22" cy="22" r="21" fill="white"/>
         <image href="${fotoUrl}" x="3" y="3" width="38" height="38" clip-path="url(#circle-clip)" preserveAspectRatio="xMidYMid slice"/>
-        <circle cx="22" cy="22" r="21" fill="none" stroke="white" stroke-width="3"/>
+        <circle cx="22" cy="22" r="21" fill="none" stroke="${borderColor}" stroke-width="3"/>
       </svg>
     `
     return {
@@ -24,7 +26,7 @@ function buildIcon(fotoUrl, nome) {
   const inicial = (nome?.[0] || '?').toUpperCase()
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44">
-      <circle cx="22" cy="22" r="20" fill="#20D4B8" stroke="white" stroke-width="3"/>
+      <circle cx="22" cy="22" r="20" fill="#20D4B8" stroke="${borderColor}" stroke-width="3"/>
       <text x="22" y="27" text-anchor="middle" font-size="16" font-weight="bold"
         font-family="Plus Jakarta Sans,sans-serif" fill="#08141A">${inicial}</text>
     </svg>
@@ -36,12 +38,12 @@ function buildIcon(fotoUrl, nome) {
   }
 }
 
-export function ProviderMarker({ provider, onClick, isSelected }) {
+export function ProviderMarker({ provider, onClick, isSelected, isOnline = true }) {
   return (
     <MarkerF
       key={provider.user_id}
       position={{ lat: provider.latitude, lng: provider.longitude }}
-      icon={buildIcon(provider.foto_url, provider.nome)}
+      icon={buildIcon(provider.foto_url, provider.nome, isOnline)}
       onClick={() => onClick(provider)}
       zIndex={isSelected ? 10 : 1}
     />
