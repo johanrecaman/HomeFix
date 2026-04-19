@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { Header } from '../components/Header'
 import { Button } from '../components/Button'
+import { SlotManager } from '../components/SlotManager'
 import { MapPin, Bell, CheckCircle, XCircle, AlertTriangle, Wifi } from 'lucide-react'
 
 function getGPSCoords() {
@@ -176,6 +177,7 @@ export function ProviderDashboard() {
           {[
             { id: 'propostas', label: 'Propostas', badge: pendingCount },
             { id: 'alerta', label: 'Modo Alerta' },
+            { id: 'agenda', label: 'Agenda' },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${
@@ -249,6 +251,10 @@ export function ProviderDashboard() {
               </div>
             )}
           </div>
+        )}
+
+        {tab === 'agenda' && (
+          <SlotManager prestadorId={profile.id}/>
         )}
       </div>
     </div>
