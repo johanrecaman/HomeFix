@@ -13,12 +13,23 @@ ALTER TABLE public.prestadores
 ALTER TABLE public.prestadores
   ADD COLUMN IF NOT EXISTS avaliacao numeric(2,1) DEFAULT null;
 
--- 4. Promover primeiro admin (rode apenas uma vez)
-UPDATE public.users SET is_admin = true WHERE email = 'johanstrr@gmail.com';
+-- 4. Promover primeiro admin
+DO $$
+BEGIN
+  UPDATE public.users SET is_admin = true WHERE email = 'johanstrr@gmail.com';
+  IF NOT FOUND THEN
+    RAISE WARNING 'Admin promotion: no row matched email johanstrr@gmail.com';
+  END IF;
+END $$;
+
+-- 5. Helper function: bypasses RLS to check is_admin (breaks recursion)
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  SELECT COALESCE(is_admin, false) FROM public.users WHERE id = auth.uid();
+$$;
 
 -- ── RLS: substituir policy pública de prestadores ────────────────────────────
 
--- Remove policy antiga que não filtrava por approval_status
 DROP POLICY IF EXISTS "Anyone can read online providers" ON public.prestadores;
 
 -- Qualquer um lê prestadores ativos
@@ -29,39 +40,19 @@ CREATE POLICY "Public reads active providers"
 -- Admin lê todos os prestadores (inclusive banidos)
 CREATE POLICY "Admin reads all providers"
   ON public.prestadores FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.users
-      WHERE id = auth.uid() AND is_admin = true
-    )
-  );
+  USING ( public.is_admin() );
 
 -- Admin pode editar qualquer prestador (ban/unban, avaliacao)
 CREATE POLICY "Admin updates any provider"
   ON public.prestadores FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.users
-      WHERE id = auth.uid() AND is_admin = true
-    )
-  );
+  USING ( public.is_admin() );
 
 -- Admin pode ler todos os perfis de usuário
 CREATE POLICY "Admin reads all users"
   ON public.users FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.users
-      WHERE id = auth.uid() AND is_admin = true
-    )
-  );
+  USING ( public.is_admin() );
 
 -- Admin pode atualizar qualquer perfil de usuário
 CREATE POLICY "Admin updates any user"
   ON public.users FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.users
-      WHERE id = auth.uid() AND is_admin = true
-    )
-  );
+  USING ( public.is_admin() );
