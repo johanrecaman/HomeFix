@@ -10,6 +10,7 @@ import { ProviderCardSkeleton } from '../components/ProviderCardSkeleton'
 import { ProviderMarker } from '../components/ProviderMarker'
 import { ProviderInfoWindow } from '../components/ProviderInfoWindow'
 import { LocationGate } from '../components/LocationGate'
+import { DateTimeFilter } from '../components/DateTimeFilter'
 import { X, Send, MapPin } from 'lucide-react'
 
 const MAP_OPTIONS = {
@@ -104,6 +105,13 @@ async function fetchNearbyProviders(lat, lng, radiusKm = 10) {
   return (data || []).map(p => ({ ...p, foto_url: p.user_foto_url }))
 }
 
+async function fetchProvidersWithAvailability(lat, lng, radiusKm, desiredAt) {
+  const { data } = await supabase.rpc('get_nearby_providers_with_availability', {
+    lat, lng, radius_km: radiusKm, desired_at: new Date(desiredAt).toISOString(),
+  })
+  return (data || []).map(p => ({ ...p, foto_url: p.user_foto_url }))
+}
+
 function MapContent({ userLocation }) {
   const { profile } = useAuth()
   const { isLoaded, loadError } = useGoogleMaps()
@@ -118,11 +126,14 @@ function MapContent({ userLocation }) {
   const [soliciting, setSoliciting] = useState(null)
   const [sent, setSent] = useState(false)
   const [radius, setRadius] = useState(10)
+  const [dateFilter, setDateFilter] = useState('')
 
-  const loadProviders = useCallback(async (lat, lng, r) => {
+  const loadProviders = useCallback(async (lat, lng, r, dt) => {
     setLoadingProviders(true)
     try {
-      const data = await fetchNearbyProviders(lat, lng, r)
+      const data = dt
+        ? await fetchProvidersWithAvailability(lat, lng, r, dt)
+        : await fetchNearbyProviders(lat, lng, r)
       setProviders(data)
     } catch {
       setProviders([])
@@ -151,15 +162,15 @@ function MapContent({ userLocation }) {
     return () => supabase.removeChannel(channel)
   }, [userLocation, loadProviders])
 
-  // Radius debounce — skip on initial mount (initial load handles the first fetch)
+  // Radius/dateFilter debounce — skip on initial mount (initial load handles the first fetch)
   useEffect(() => {
     if (isInitialMount.current) { isInitialMount.current = false; return }
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
-      loadProviders(userLocation.lat, userLocation.lng, radius)
+      loadProviders(userLocation.lat, userLocation.lng, radius, dateFilter)
     }, 500)
     return () => clearTimeout(debounceRef.current)
-  }, [radius, userLocation, loadProviders])
+  }, [radius, dateFilter, userLocation, loadProviders])
 
   const onMapLoad = useCallback((map) => {
     mapRef.current = map
@@ -233,10 +244,14 @@ function MapContent({ userLocation }) {
       <div className="w-full md:w-80 flex flex-col gap-3">
         <div className="bg-white dark:bg-[#11222A] rounded-xl border border-ink-900/10 dark:border-white/10 p-4">
           <h2 className="font-extrabold text-ink-900 dark:text-white tracking-tight mb-1" style={{ letterSpacing: '-0.025em' }}>
-            {loadingProviders ? '...' : `${providers.length} prestador${providers.length !== 1 ? 'es' : ''} próximos`}
+            {loadingProviders ? '...' : `${providers.length} prestador${providers.length !== 1 ? 'es' : ''} ${dateFilter ? 'disponíveis' : 'próximos'}`}
           </h2>
-          <p className="text-xs text-ink-500 dark:text-ink-600 mb-3">Clique no pin ou no card para ver o perfil</p>
-          <div className="flex items-center gap-3">
+          <p className="text-xs text-ink-500 dark:text-ink-600">
+            {dateFilter
+              ? `Com disponibilidade em ${new Date(dateFilter).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+              : 'Clique no pin ou no card para ver o perfil'}
+          </p>
+          <div className="flex items-center gap-3 mt-3">
             <input
               type="range"
               min={1}
@@ -247,6 +262,11 @@ function MapContent({ userLocation }) {
             />
             <span className="text-xs font-bold text-ink-700 dark:text-ink-300 w-14 text-right">{radius} km</span>
           </div>
+          <DateTimeFilter
+            value={dateFilter}
+            onChange={v => setDateFilter(v)}
+            onClear={() => setDateFilter('')}
+          />
         </div>
 
         {selected && (
