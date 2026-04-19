@@ -1,29 +1,38 @@
-import { useState, useEffect, useCallback } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
-import L from 'leaflet'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { GoogleMap } from '@react-google-maps/api'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { useGoogleMaps } from '../hooks/useGoogleMaps'
 import { Header } from '../components/Header'
 import { Button } from '../components/Button'
+import { MapSkeleton } from '../components/MapSkeleton'
+import { ProviderCardSkeleton } from '../components/ProviderCardSkeleton'
+import { ProviderMarker } from '../components/ProviderMarker'
+import { ProviderInfoWindow } from '../components/ProviderInfoWindow'
 import { X, Send, MapPin } from 'lucide-react'
 
-const providerIcon = L.divIcon({
-  className: '',
-  html: `<div style="
-    width:40px;height:40px;border-radius:50%;
-    background:#20D4B8;border:3px solid white;
-    box-shadow:0 4px 12px rgba(32,212,184,0.5);
-    display:grid;place-items:center;font-size:18px;cursor:pointer;
-  ">🔧</div>`,
-  iconSize: [40, 40],
-  iconAnchor: [20, 20],
-})
-
-function RecenterMap({ center }) {
-  const map = useMap()
-  useEffect(() => { if (center) map.flyTo(center, 13, { duration: 1 }) }, [center, map])
-  return null
+const MAP_OPTIONS = {
+  disableDefaultUI: false,
+  zoomControl: true,
+  streetViewControl: false,
+  mapTypeControl: false,
+  fullscreenControl: false,
+  styles: [
+    { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
+    { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+    { elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
+    { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f5f5' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+    { featureType: 'road.arterial', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#dadada' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9c9c9' }] },
+    { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+    { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+    { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  ],
 }
+
+const MAP_CONTAINER_STYLE = { height: '100%', width: '100%', minHeight: '400px' }
 
 const inputClass = "w-full px-4 py-3 rounded-lg border border-ink-900/15 dark:border-white/15 bg-transparent text-ink-900 dark:text-white placeholder-ink-500 focus:outline-none focus:ring-2 focus:ring-teal-400 text-sm"
 
@@ -92,34 +101,69 @@ async function fetchOnlineProviders() {
     .from('prestadores')
     .select('*, users(nome, foto_url, telefone)')
     .eq('status', 'online')
+    .eq('approval_status', 'active')
     .not('latitude', 'is', null)
-  return (data || []).map(p => ({ ...p, nome: p.users?.nome, foto_url: p.users?.foto_url }))
+  return (data || []).map(p => ({
+    ...p,
+    nome: p.users?.nome,
+    foto_url: p.users?.foto_url,
+  }))
 }
 
 export function ClientMap() {
   const { profile } = useAuth()
+  const { isLoaded, loadError } = useGoogleMaps()
+  const mapRef = useRef(null)
   const [providers, setProviders] = useState([])
+  const [loadingProviders, setLoadingProviders] = useState(true)
   const [selected, setSelected] = useState(null)
+  const [infoOpen, setInfoOpen] = useState(null)
   const [soliciting, setSoliciting] = useState(null)
   const [sent, setSent] = useState(false)
-  const [mapCenter, setMapCenter] = useState([-23.55, -46.63])
+  const [center] = useState({ lat: -23.55, lng: -46.63 })
 
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(pos => {
-        setMapCenter([pos.coords.latitude, pos.coords.longitude])
+        if (mapRef.current) {
+          mapRef.current.panTo({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        }
       })
     }
-    fetchOnlineProviders().then(setProviders)
+
+    fetchOnlineProviders().then(data => {
+      setProviders(data)
+      setLoadingProviders(false)
+    })
 
     const channel = supabase.channel('map-providers')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'prestadores' }, () => {
-        fetchOnlineProviders().then(setProviders)
+        fetchOnlineProviders().then(data => {
+          setProviders(data)
+          setInfoOpen(prev => prev && data.find(p => p.user_id === prev.user_id) ? prev : null)
+          setSelected(prev => prev && data.find(p => p.user_id === prev.user_id) ? prev : null)
+        })
       })
       .subscribe()
 
     return () => supabase.removeChannel(channel)
   }, [])
+
+  const onMapLoad = useCallback((map) => {
+    mapRef.current = map
+  }, [])
+
+  useEffect(() => {
+    if (!mapRef.current || providers.length === 0) return
+    if (providers.length === 1) {
+      mapRef.current.setCenter({ lat: providers[0].latitude, lng: providers[0].longitude })
+      mapRef.current.setZoom(14)
+      return
+    }
+    const bounds = new window.google.maps.LatLngBounds()
+    providers.forEach(p => bounds.extend({ lat: p.latitude, lng: p.longitude }))
+    mapRef.current.fitBounds(bounds, 80)
+  }, [providers])
 
   function handleSent() {
     setSoliciting(null)
@@ -127,41 +171,57 @@ export function ClientMap() {
     setTimeout(() => setSent(false), 4000)
   }
 
+  function handleMarkerClick(provider) {
+    setSelected(provider)
+    setInfoOpen(provider)
+  }
+
   return (
     <div className="min-h-screen bg-[#FAF8F3] dark:bg-[#08141A] flex flex-col">
       <Header/>
       <div className="flex-1 flex flex-col md:flex-row gap-4 max-w-7xl mx-auto w-full px-4 py-6" style={{ minHeight: 'calc(100vh - 76px)' }}>
+
         {/* Map */}
         <div className="flex-1 rounded-xl overflow-hidden border border-ink-900/10 dark:border-white/10" style={{ minHeight: '400px' }}>
-          <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%', minHeight: '400px' }}>
-            <TileLayer
-              attribution='&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            <RecenterMap center={mapCenter}/>
-            {providers.map(p => p.latitude && p.longitude ? (
-              <Marker
-                key={p.user_id}
-                position={[p.latitude, p.longitude]}
-                icon={providerIcon}
-                eventHandlers={{ click: () => setSelected(p) }}
-              >
-                <Popup>
-                  <div style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', padding: '4px' }}>
-                    <p style={{ fontWeight: 700, marginBottom: 2 }}>{p.nome}</p>
-                    <p style={{ fontSize: 12, color: '#6E8984' }}>{p.categoria}</p>
-                  </div>
-                </Popup>
-              </Marker>
-            ) : null)}
-          </MapContainer>
+          {!isLoaded || loadingProviders ? (
+            <MapSkeleton/>
+          ) : loadError ? (
+            <div className="h-full grid place-items-center text-red-500 text-sm">
+              Erro ao carregar o mapa. Verifique a API key.
+            </div>
+          ) : (
+            <GoogleMap
+              mapContainerStyle={MAP_CONTAINER_STYLE}
+              center={center}
+              zoom={13}
+              options={MAP_OPTIONS}
+              onLoad={onMapLoad}
+              onClick={() => setInfoOpen(null)}
+            >
+              {providers.map(p => (
+                <ProviderMarker
+                  key={p.user_id}
+                  provider={p}
+                  onClick={handleMarkerClick}
+                  isSelected={selected?.user_id === p.user_id}
+                />
+              ))}
+              {infoOpen && (
+                <ProviderInfoWindow
+                  provider={infoOpen}
+                  onClose={() => setInfoOpen(null)}
+                  onSolicitar={p => { setInfoOpen(null); setSoliciting(p) }}
+                />
+              )}
+            </GoogleMap>
+          )}
         </div>
 
         {/* Sidebar */}
         <div className="w-full md:w-80 flex flex-col gap-3">
           <div className="bg-white dark:bg-[#11222A] rounded-xl border border-ink-900/10 dark:border-white/10 p-4">
             <h2 className="font-extrabold text-ink-900 dark:text-white tracking-tight mb-1" style={{ letterSpacing: '-0.025em' }}>
-              {providers.length} prestador{providers.length !== 1 ? 'es' : ''} online
+              {loadingProviders ? '...' : `${providers.length} prestador${providers.length !== 1 ? 'es' : ''} online`}
             </h2>
             <p className="text-xs text-ink-500 dark:text-ink-600">Clique no pin ou no card para ver o perfil</p>
           </div>
@@ -173,7 +233,7 @@ export function ClientMap() {
                   <h3 className="font-bold text-ink-900 dark:text-white">{selected.nome}</h3>
                   <p className="text-xs text-ink-600 dark:text-ink-400 mt-0.5">{selected.categoria}</p>
                 </div>
-                <button onClick={() => setSelected(null)} className="text-ink-400 hover:text-ink-700 dark:hover:text-ink-300">
+                <button onClick={() => { setSelected(null); setInfoOpen(null) }} className="text-ink-400 hover:text-ink-700 dark:hover:text-ink-300">
                   <X size={16}/>
                 </button>
               </div>
@@ -185,6 +245,9 @@ export function ClientMap() {
                   A partir de <span className="text-teal-600 dark:text-teal-400">R$ {Number(selected.preco_medio).toFixed(2)}</span>
                 </p>
               )}
+              {selected.avaliacao && (
+                <p className="text-sm font-semibold text-amber-500 mb-4">★ {Number(selected.avaliacao).toFixed(1)}</p>
+              )}
               <Button className="w-full" onClick={() => setSoliciting(selected)}>
                 <Send size={14}/> Solicitar serviço
               </Button>
@@ -192,41 +255,50 @@ export function ClientMap() {
           )}
 
           <div className="flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: '60vh' }}>
-            {providers.map(p => (
-              <button key={p.user_id}
-                onClick={() => {
-                  setSelected(p)
-                  if (p.latitude && p.longitude) setMapCenter([p.latitude, p.longitude])
-                }}
-                className={`text-left bg-white dark:bg-[#11222A] rounded-xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-md ${
-                  selected?.user_id === p.user_id
-                    ? 'border-teal-400'
-                    : 'border-ink-900/10 dark:border-white/10'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-teal-100 dark:bg-teal-400/15 grid place-items-center text-teal-700 dark:text-teal-300 font-bold text-sm flex-shrink-0">
-                    {p.nome?.[0]?.toUpperCase() || '?'}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-ink-900 dark:text-white text-sm truncate">{p.nome}</p>
-                    <p className="text-xs text-ink-500 dark:text-ink-600 truncate">{p.categoria}</p>
-                  </div>
-                  {p.preco_medio && (
-                    <span className="text-xs font-bold text-teal-600 dark:text-teal-400 whitespace-nowrap">
-                      R$ {Number(p.preco_medio).toFixed(0)}
-                    </span>
-                  )}
-                </div>
-              </button>
-            ))}
-
-            {providers.length === 0 && (
+            {loadingProviders ? (
+              <ProviderCardSkeleton/>
+            ) : providers.length === 0 ? (
               <div className="text-center py-12 text-ink-500 dark:text-ink-600">
                 <MapPin size={32} className="mx-auto mb-3 text-ink-300 dark:text-ink-700"/>
-                <p className="text-sm font-medium">Nenhum prestador online agora</p>
-                <p className="text-xs mt-1">Tente novamente em alguns minutos</p>
+                <p className="text-sm font-medium">Nenhum prestador disponível na sua região agora</p>
+                <p className="text-xs mt-1">Novos prestadores aparecem assim que ficam online</p>
               </div>
+            ) : (
+              providers.map(p => (
+                <button key={p.user_id}
+                  onClick={() => {
+                    setSelected(p)
+                    setInfoOpen(p)
+                    if (mapRef.current) mapRef.current.panTo({ lat: p.latitude, lng: p.longitude })
+                  }}
+                  className={`text-left bg-white dark:bg-[#11222A] rounded-xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-md ${
+                    selected?.user_id === p.user_id ? 'border-teal-400' : 'border-ink-900/10 dark:border-white/10'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-teal-100 dark:bg-teal-400/15 grid place-items-center text-teal-700 dark:text-teal-300 font-bold text-sm flex-shrink-0">
+                      {p.foto_url
+                        ? <img src={p.foto_url} alt={p.nome} className="w-full h-full rounded-full object-cover"/>
+                        : p.nome?.[0]?.toUpperCase() || '?'
+                      }
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-ink-900 dark:text-white text-sm truncate">{p.nome}</p>
+                      <p className="text-xs text-ink-500 dark:text-ink-600 truncate">{p.categoria}</p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      {p.preco_medio && (
+                        <p className="text-xs font-bold text-teal-600 dark:text-teal-400">
+                          R$ {Number(p.preco_medio).toFixed(0)}
+                        </p>
+                      )}
+                      {p.avaliacao && (
+                        <p className="text-xs text-amber-500">★ {Number(p.avaliacao).toFixed(1)}</p>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              ))
             )}
           </div>
         </div>
