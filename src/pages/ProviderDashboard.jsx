@@ -1,10 +1,20 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useGeolocation } from '../hooks/useGeolocation'
 import { Header } from '../components/Header'
 import { Button } from '../components/Button'
 import { MapPin, Bell, CheckCircle, XCircle, AlertTriangle, Wifi } from 'lucide-react'
+
+function getGPSCoords() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error('Geolocalização não suportada')); return }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => reject(new Error('Permissão de localização negada')),
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  })
+}
 
 function StatusBadge({ status }) {
   const map = {
@@ -53,7 +63,6 @@ function ProposalCard({ sol, onAccept, onReject }) {
 
 export function ProviderDashboard() {
   const { profile } = useAuth()
-  const { getPosition } = useGeolocation()
   const [tab, setTab] = useState('propostas')
   const [status, setStatus] = useState('offline')
   const [proposals, setProposals] = useState([])
@@ -94,7 +103,7 @@ export function ProviderDashboard() {
 
     if (newStatus === 'online') {
       try {
-        const coords = await getPosition()
+        const coords = await getGPSCoords()
         updateData.latitude = coords.lat
         updateData.longitude = coords.lng
         updateData.updated_at = new Date().toISOString()
@@ -119,7 +128,7 @@ export function ProviderDashboard() {
     setToggling(true)
     const updateData = { status: 'online', updated_at: new Date().toISOString() }
     try {
-      const coords = await getPosition()
+      const coords = await getGPSCoords()
       updateData.latitude = coords.lat
       updateData.longitude = coords.lng
     } catch { /* proceed without GPS */ }
