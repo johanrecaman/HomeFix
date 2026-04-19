@@ -109,6 +109,8 @@ function MapContent({ userLocation }) {
   const { isLoaded, loadError } = useGoogleMaps()
   const mapRef = useRef(null)
   const debounceRef = useRef(null)
+  const isInitialMount = useRef(true)
+  const radiusRef = useRef(10)
   const [providers, setProviders] = useState([])
   const [loadingProviders, setLoadingProviders] = useState(true)
   const [selected, setSelected] = useState(null)
@@ -129,13 +131,16 @@ function MapContent({ userLocation }) {
     }
   }, [])
 
+  // Keep radiusRef in sync so the realtime callback always has the current value
+  useEffect(() => { radiusRef.current = radius }, [radius])
+
   // Initial load + realtime channel
   useEffect(() => {
-    loadProviders(userLocation.lat, userLocation.lng, radius)
+    loadProviders(userLocation.lat, userLocation.lng, radiusRef.current)
 
     const channel = supabase.channel('map-providers')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'prestadores' }, () => {
-        fetchNearbyProviders(userLocation.lat, userLocation.lng, radius).then(data => {
+        fetchNearbyProviders(userLocation.lat, userLocation.lng, radiusRef.current).then(data => {
           setProviders(data)
           setInfoOpen(prev => prev && data.find(p => p.user_id === prev.user_id) ? prev : null)
           setSelected(prev => prev && data.find(p => p.user_id === prev.user_id) ? prev : null)
@@ -146,8 +151,9 @@ function MapContent({ userLocation }) {
     return () => supabase.removeChannel(channel)
   }, [userLocation, loadProviders])
 
-  // Radius debounce
+  // Radius debounce — skip on initial mount (initial load handles the first fetch)
   useEffect(() => {
+    if (isInitialMount.current) { isInitialMount.current = false; return }
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       loadProviders(userLocation.lat, userLocation.lng, radius)
