@@ -11,7 +11,8 @@ import { ProviderMarker } from '../components/ProviderMarker'
 import { ProviderInfoWindow } from '../components/ProviderInfoWindow'
 import { LocationGate } from '../components/LocationGate'
 import { DateTimeFilter } from '../components/DateTimeFilter'
-import { X, Send, MapPin } from 'lucide-react'
+import { X, Send, MapPin, Zap } from 'lucide-react'
+import QuickCallPanel from '../components/QuickCallPanel'
 
 const MAP_OPTIONS = {
   disableDefaultUI: false,
@@ -146,6 +147,7 @@ function MapContent({ userLocation }) {
   const [filterCategoria, setFilterCategoria] = useState('')
   const [minRate, setMinRate] = useState('')
   const [maxRate, setMaxRate] = useState('')
+  const [quickCallOpen, setQuickCallOpen] = useState(false)
 
   // Fetch distinct categories once on mount
   useEffect(() => {
@@ -239,39 +241,59 @@ function MapContent({ userLocation }) {
   return (
     <div className="flex-1 flex flex-col md:flex-row gap-4 max-w-7xl mx-auto w-full px-4 py-6" style={{ minHeight: 'calc(100vh - 76px)' }}>
       {/* Map */}
-      <div className="flex-1 rounded-xl overflow-hidden border border-ink-900/10 dark:border-white/10" style={{ minHeight: '400px' }}>
-        {!isLoaded || loadingProviders ? (
-          <MapSkeleton/>
-        ) : loadError ? (
-          <div className="h-full grid place-items-center text-red-500 text-sm">
-            Erro ao carregar o mapa. Verifique a API key.
-          </div>
-        ) : (
-          <GoogleMap
-            mapContainerStyle={MAP_CONTAINER_STYLE}
-            center={userLocation}
-            zoom={13}
-            options={MAP_OPTIONS}
-            onLoad={onMapLoad}
-            onClick={() => setInfoOpen(null)}
-          >
-            {providers.map(p => (
-              <ProviderMarker
-                key={p.user_id}
-                provider={p}
-                onClick={handleMarkerClick}
-                isSelected={selected?.user_id === p.user_id}
-                isOnline={p.is_online ?? true}
-              />
-            ))}
-            {infoOpen && (
-              <ProviderInfoWindow
-                provider={infoOpen}
-                onClose={() => setInfoOpen(null)}
-                onSolicitar={p => { setInfoOpen(null); setSoliciting(p) }}
-              />
-            )}
-          </GoogleMap>
+      <div className="relative flex-1" style={{ minHeight: '400px' }}>
+        <div className="absolute inset-0 rounded-xl overflow-hidden border border-ink-900/10 dark:border-white/10">
+          {!isLoaded || loadingProviders ? (
+            <MapSkeleton/>
+          ) : loadError ? (
+            <div className="h-full grid place-items-center text-red-500 text-sm">
+              Erro ao carregar o mapa. Verifique a API key.
+            </div>
+          ) : (
+            <GoogleMap
+              mapContainerStyle={MAP_CONTAINER_STYLE}
+              center={userLocation}
+              zoom={13}
+              options={MAP_OPTIONS}
+              onLoad={onMapLoad}
+              onClick={() => setInfoOpen(null)}
+            >
+              {providers.map(p => (
+                <ProviderMarker
+                  key={p.user_id}
+                  provider={p}
+                  onClick={handleMarkerClick}
+                  isSelected={selected?.user_id === p.user_id}
+                  isOnline={p.is_online ?? true}
+                />
+              ))}
+              {infoOpen && (
+                <ProviderInfoWindow
+                  provider={infoOpen}
+                  onClose={() => setInfoOpen(null)}
+                  onSolicitar={p => { setInfoOpen(null); setSoliciting(p) }}
+                />
+              )}
+            </GoogleMap>
+          )}
+        </div>
+
+        {/* Quick Call trigger */}
+        <button
+          onClick={() => setQuickCallOpen(true)}
+          className="absolute bottom-6 right-4 z-[1000] flex items-center gap-2 rounded-full bg-amber-400 hover:bg-amber-500 text-white font-semibold px-4 py-2.5 shadow-lg transition"
+        >
+          <Zap size={16} />
+          Chamado Rápido
+        </button>
+
+        {quickCallOpen && (
+          <QuickCallPanel
+            userLocation={userLocation}
+            clientId={profile?.id}
+            categorias={categorias}
+            onClose={() => setQuickCallOpen(false)}
+          />
         )}
       </div>
 
