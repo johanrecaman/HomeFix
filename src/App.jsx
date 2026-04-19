@@ -18,6 +18,7 @@ function PrivateRoute({ children, requiredType }) {
     </div>
   )
   if (!profile) return <Navigate to="/login" replace/>
+  if (profile.is_admin) return <Navigate to="/admin" replace/>
   if (requiredType && profile.tipo !== requiredType) return <Navigate to="/" replace/>
   return children
 }

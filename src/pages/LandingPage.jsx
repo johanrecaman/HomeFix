@@ -49,7 +49,8 @@ export function LandingPage() {
 
   useEffect(() => {
     if (!loading && profile) {
-      navigate(profile.tipo === 'prestador' ? '/dashboard' : '/mapa', { replace: true })
+      if (profile.is_admin) navigate('/admin', { replace: true })
+      else navigate(profile.tipo === 'prestador' ? '/dashboard' : '/mapa', { replace: true })
     }
   }, [profile, loading, navigate])
 
