@@ -87,12 +87,14 @@ Migration `004_homefix_v3.sql` adds: `is_online`, `hourly_rate`, `last_location`
 
 New components: `AgendaCalendar`, `FlashAlert`, `QuickCallPanel`. New hook: `useLocationSync`. New util: `src/lib/geo.js`.
 
-**⚠️ Pending DB apply:** `supabase/migrations/004_homefix_v3.sql` must be run in Supabase SQL Editor.
+Migration `005_admin_tipo.sql`: `is_admin` removed from `users`, `tipo='admin'` is now the admin identifier. `solicitacoes.status` now accepts `'cancelada'`. Frontend (`App.jsx`, `Header.jsx`, `LandingPage.jsx`) updated — no `is_admin` references remain.
+
+**⚠️ Pending DB apply:** `supabase/migrations/004_homefix_v3.sql` and `supabase/migrations/005_admin_tipo.sql` must be run in Supabase SQL Editor.
 
 ## Pending Work
 
-**Next spec in progress:** `docs/superpowers/specs/` — fixes for:
-1. AgendaCalendar full rebuild (visual schedule with real booked slots, not just "available" text)
-2. Cancellation flow — both provider and client can cancel `solicitacoes`
-3. ClientMap UX overhaul — Quick Call button placement, map layout
-4. Admin role refactor — remove `is_admin` column, use `tipo = 'admin'` as third tipo value
+**In progress:** UI fixes — `docs/superpowers/plans/2026-04-19-ui-fixes-agenda-cancel-map.md`
+
+1. AgendaCalendar full rebuild — day-list with booked appointment cards + inline cancel
+2. Cancellation flow — client can cancel from ClientDashboard (Propostas + Histórico tabs)
+3. ClientMap UX overhaul — two tabs: Mapa (fullscreen + Chamada Rápida bottom sheet) + Busca (provider list + filters)
