@@ -6,13 +6,12 @@ import { useGoogleMaps } from '../hooks/useGoogleMaps'
 import { Header } from '../components/Header'
 import { Button } from '../components/Button'
 import { MapSkeleton } from '../components/MapSkeleton'
-import { ProviderCardSkeleton } from '../components/ProviderCardSkeleton'
 import { ProviderMarker } from '../components/ProviderMarker'
 import { ProviderInfoWindow } from '../components/ProviderInfoWindow'
 import { LocationGate } from '../components/LocationGate'
-import { DateTimeFilter } from '../components/DateTimeFilter'
-import { X, Send, MapPin, Zap } from 'lucide-react'
+import BuscaTab from '../components/BuscaTab'
 import QuickCallPanel from '../components/QuickCallPanel'
+import { X, Send, Map, Search, Zap } from 'lucide-react'
 
 const MAP_OPTIONS = {
   disableDefaultUI: false,
@@ -99,30 +98,11 @@ function SolicitacaoModal({ provider, clientId, onClose, onSent }) {
   )
 }
 
-async function fetchNearbyProviders(lat, lng, radiusKm = 10, filters = {}) {
-  const { filterCategoria, minRate, maxRate } = filters
+async function fetchNearbyProviders(lat, lng, radiusKm = 10) {
   const { data, error } = await supabase.rpc('get_nearby_providers', {
     lat,
     lng,
     radius_km: radiusKm,
-    filter_categoria: filterCategoria || null,
-    min_hourly_rate: minRate ? parseFloat(minRate) : null,
-    max_hourly_rate: maxRate ? parseFloat(maxRate) : null,
-  })
-  if (error) { console.error(error); return [] }
-  return (data || []).map(p => ({ ...p, foto_url: p.foto_url ?? p.user_foto_url }))
-}
-
-async function fetchProvidersWithAvailability(lat, lng, radiusKm, desiredAt, filters = {}) {
-  const { filterCategoria, minRate, maxRate } = filters
-  const { data, error } = await supabase.rpc('get_nearby_providers_with_availability', {
-    lat,
-    lng,
-    radius_km: radiusKm,
-    desired_at: new Date(desiredAt).toISOString(),
-    filter_categoria: filterCategoria || null,
-    min_hourly_rate: minRate ? parseFloat(minRate) : null,
-    max_hourly_rate: maxRate ? parseFloat(maxRate) : null,
   })
   if (error) { console.error(error); return [] }
   return (data || []).map(p => ({ ...p, foto_url: p.foto_url ?? p.user_foto_url }))
@@ -136,57 +116,43 @@ function MapContent({ userLocation }) {
   const isInitialMount = useRef(true)
   const radiusRef = useRef(10)
   const [providers, setProviders] = useState([])
-  const [loadingProviders, setLoadingProviders] = useState(true)
   const [selected, setSelected] = useState(null)
   const [infoOpen, setInfoOpen] = useState(null)
   const [soliciting, setSoliciting] = useState(null)
   const [sent, setSent] = useState(false)
   const [radius, setRadius] = useState(10)
-  const [dateFilter, setDateFilter] = useState('')
   const [categorias, setCategorias] = useState([])
-  const [filterCategoria, setFilterCategoria] = useState('')
-  const [minRate, setMinRate] = useState('')
-  const [maxRate, setMaxRate] = useState('')
   const [quickCallOpen, setQuickCallOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState('mapa')
 
-  // Fetch distinct categories once on mount
   useEffect(() => {
     supabase
       .from('prestadores')
       .select('categoria')
       .eq('approval_status', 'active')
       .then(({ data }) => {
-        const unique = [
-          ...new Set((data || []).map((r) => r.categoria).filter(Boolean)),
-        ].sort()
+        const unique = [...new Set((data || []).map(r => r.categoria).filter(Boolean))].sort()
         setCategorias(unique)
       })
   }, [])
 
-  const loadProviders = useCallback(async (lat, lng, r, dt, filters) => {
-    setLoadingProviders(true)
+  const loadProviders = useCallback(async (lat, lng, r) => {
     try {
-      const data = dt
-        ? await fetchProvidersWithAvailability(lat, lng, r, dt, filters)
-        : await fetchNearbyProviders(lat, lng, r, filters)
+      const data = await fetchNearbyProviders(lat, lng, r)
       setProviders(data)
     } catch {
       setProviders([])
-    } finally {
-      setLoadingProviders(false)
     }
   }, [])
 
-  // Keep radiusRef in sync so the realtime callback always has the current value
   useEffect(() => { radiusRef.current = radius }, [radius])
 
-  // Initial load + realtime channel
   useEffect(() => {
-    loadProviders(userLocation.lat, userLocation.lng, radiusRef.current, '', { filterCategoria, minRate, maxRate })
+    loadProviders(userLocation.lat, userLocation.lng, radiusRef.current)
 
     const channel = supabase.channel('map-providers')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'prestadores' }, () => {
-        fetchNearbyProviders(userLocation.lat, userLocation.lng, radiusRef.current, { filterCategoria, minRate, maxRate }).then(data => {
+        fetchNearbyProviders(userLocation.lat, userLocation.lng, radiusRef.current).then(data => {
           setProviders(data)
           setInfoOpen(prev => prev && data.find(p => p.user_id === prev.user_id) ? prev : null)
           setSelected(prev => prev && data.find(p => p.user_id === prev.user_id) ? prev : null)
@@ -198,15 +164,14 @@ function MapContent({ userLocation }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLocation, loadProviders])
 
-  // Radius/dateFilter/category/rate debounce — skip on initial mount (initial load handles the first fetch)
   useEffect(() => {
     if (isInitialMount.current) { isInitialMount.current = false; return }
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
-      loadProviders(userLocation.lat, userLocation.lng, radius, dateFilter, { filterCategoria, minRate, maxRate })
+      loadProviders(userLocation.lat, userLocation.lng, radius)
     }, 500)
     return () => clearTimeout(debounceRef.current)
-  }, [radius, dateFilter, filterCategoria, minRate, maxRate, userLocation, loadProviders])
+  }, [radius, userLocation, loadProviders])
 
   const onMapLoad = useCallback((map) => {
     mapRef.current = map
@@ -214,7 +179,6 @@ function MapContent({ userLocation }) {
     map.setZoom(13)
   }, [userLocation])
 
-  // FitBounds when providers load
   useEffect(() => {
     if (!mapRef.current || !isLoaded || providers.length === 0) return
     if (providers.length === 1) {
@@ -233,25 +197,42 @@ function MapContent({ userLocation }) {
     setTimeout(() => setSent(false), 4000)
   }
 
-  function handleMarkerClick(provider) {
-    setSelected(provider)
-    setInfoOpen(provider)
-  }
-
   return (
-    <div className="flex-1 flex flex-col md:flex-row gap-4 max-w-7xl mx-auto w-full px-4 py-6" style={{ minHeight: 'calc(100vh - 76px)' }}>
-      {/* Map */}
-      <div className="relative flex-1" style={{ minHeight: '400px' }}>
-        <div className="absolute inset-0 rounded-xl overflow-hidden border border-ink-900/10 dark:border-white/10">
-          {!isLoaded || loadingProviders ? (
-            <MapSkeleton/>
-          ) : loadError ? (
-            <div className="h-full grid place-items-center text-red-500 text-sm">
-              Erro ao carregar o mapa. Verifique a API key.
-            </div>
+    <div className="flex flex-col h-full bg-white dark:bg-[#08141A]">
+      {/* Tab navigation */}
+      <div className="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-[#08141A] shrink-0">
+        <button
+          onClick={() => setActiveTab('mapa')}
+          className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition border-b-2 ${
+            activeTab === 'mapa'
+              ? 'border-[var(--teal-400)] text-[var(--teal-400)]'
+              : 'border-transparent text-[var(--text-600)] hover:text-[var(--text-900)]'
+          }`}
+        >
+          <Map size={15} />
+          Mapa
+        </button>
+        <button
+          onClick={() => setActiveTab('busca')}
+          className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition border-b-2 ${
+            activeTab === 'busca'
+              ? 'border-[var(--teal-400)] text-[var(--teal-400)]'
+              : 'border-transparent text-[var(--text-600)] hover:text-[var(--text-900)]'
+          }`}
+        >
+          <Search size={15} />
+          Busca
+        </button>
+      </div>
+
+      {/* Mapa tab */}
+      {activeTab === 'mapa' && (
+        <div className="relative flex-1">
+          {!isLoaded || loadError ? (
+            <MapSkeleton />
           ) : (
             <GoogleMap
-              mapContainerStyle={MAP_CONTAINER_STYLE}
+              mapContainerStyle={{ width: '100%', height: '100%' }}
               center={userLocation}
               zoom={13}
               options={MAP_OPTIONS}
@@ -262,7 +243,7 @@ function MapContent({ userLocation }) {
                 <ProviderMarker
                   key={p.user_id}
                   provider={p}
-                  onClick={handleMarkerClick}
+                  onClick={p => { setSelected(p); setInfoOpen(p) }}
                   isSelected={selected?.user_id === p.user_id}
                   isOnline={p.is_online ?? true}
                 />
@@ -276,182 +257,52 @@ function MapContent({ userLocation }) {
               )}
             </GoogleMap>
           )}
-        </div>
 
-        {/* Quick Call trigger */}
-        <button
-          onClick={() => setQuickCallOpen(true)}
-          className="absolute bottom-6 right-4 z-[1000] flex items-center gap-2 rounded-full bg-amber-400 hover:bg-amber-500 text-white font-semibold px-4 py-2.5 shadow-lg transition"
-        >
-          <Zap size={16} />
-          Chamado Rápido
-        </button>
-
-        {quickCallOpen && (
-          <QuickCallPanel
-            userLocation={userLocation}
-            clientId={profile?.id}
-            categorias={categorias}
-            onClose={() => setQuickCallOpen(false)}
-          />
-        )}
-      </div>
-
-      {/* Sidebar */}
-      <div className="w-full md:w-80 flex flex-col gap-3">
-        <div className="bg-white dark:bg-[#11222A] rounded-xl border border-ink-900/10 dark:border-white/10 p-4">
-          <h2 className="font-extrabold text-ink-900 dark:text-white tracking-tight mb-1" style={{ letterSpacing: '-0.025em' }}>
-            {loadingProviders ? '...' : `${providers.length} prestador${providers.length !== 1 ? 'es' : ''} ${dateFilter ? 'disponíveis' : 'próximos'}`}
-          </h2>
-          <p className="text-xs text-ink-500 dark:text-ink-600">
-            {dateFilter
-              ? `Com disponibilidade em ${new Date(dateFilter).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`
-              : 'Clique no pin ou no card para ver o perfil'}
-          </p>
-          <div className="flex items-center gap-3 mt-3">
-            <input
-              type="range"
-              min={1}
-              max={50}
+          {/* Floating radius pill */}
+          <div className="absolute top-3 right-3 z-10">
+            <select
               value={radius}
               onChange={e => setRadius(Number(e.target.value))}
-              className="flex-1 accent-teal-400 h-1.5"
-            />
-            <span className="text-xs font-bold text-ink-700 dark:text-ink-300 w-14 text-right">{radius} km</span>
-          </div>
-          <DateTimeFilter
-            value={dateFilter}
-            onChange={v => setDateFilter(v)}
-            onClear={() => setDateFilter('')}
-          />
-
-          {/* Category filter */}
-          <div className="mt-3">
-            <label className="text-xs font-medium text-[var(--text-600)] block mb-1">
-              Categoria
-            </label>
-            <select
-              value={filterCategoria}
-              onChange={(e) => setFilterCategoria(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-[#08141A] dark:border-gray-600 dark:text-white"
+              className="bg-white/90 dark:bg-[#08141A]/90 backdrop-blur border border-gray-200 dark:border-gray-700 rounded-full px-3 py-1.5 text-sm shadow-md text-[var(--text-900)]"
             >
-              <option value="">Todas</option>
-              {categorias.map((c) => (
-                <option key={c} value={c}>{c}</option>
+              {[2, 5, 10, 20, 50].map(r => (
+                <option key={r} value={r}>📍 {r} km</option>
               ))}
             </select>
           </div>
 
-          {/* Hourly rate range */}
-          <div className="mt-3">
-            <label className="text-xs font-medium text-[var(--text-600)] block mb-1">
-              Valor/hora (R$)
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                min="0"
-                placeholder="Mín"
-                value={minRate}
-                onChange={(e) => setMinRate(e.target.value)}
-                className="w-1/2 border rounded-lg px-2 py-2 text-sm dark:bg-[#08141A] dark:border-gray-600 dark:text-white"
-              />
-              <input
-                type="number"
-                min="0"
-                placeholder="Máx"
-                value={maxRate}
-                onChange={(e) => setMaxRate(e.target.value)}
-                className="w-1/2 border rounded-lg px-2 py-2 text-sm dark:bg-[#08141A] dark:border-gray-600 dark:text-white"
-              />
-            </div>
+          {/* Full-width Chamada Rápida button */}
+          <div className="absolute bottom-0 left-0 right-0 p-4">
+            <button
+              onClick={() => setQuickCallOpen(true)}
+              className="w-full bg-amber-400 hover:bg-amber-500 active:bg-amber-600 text-white font-semibold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg transition"
+            >
+              <Zap size={18} />
+              Chamada Rápida
+            </button>
           </div>
-        </div>
 
-        {selected && (
-          <div className="bg-white dark:bg-[#11222A] rounded-xl border-2 border-teal-400 p-5 shadow-md">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <h3 className="font-bold text-ink-900 dark:text-white">{selected.nome}</h3>
-                <p className="text-xs text-ink-600 dark:text-ink-400 mt-0.5">{selected.categoria}</p>
-              </div>
-              <button onClick={() => { setSelected(null); setInfoOpen(null) }} className="text-ink-400 hover:text-ink-700 dark:hover:text-ink-300">
-                <X size={16}/>
-              </button>
-            </div>
-            {selected.descricao && (
-              <p className="text-sm text-ink-600 dark:text-ink-400 mb-4 leading-relaxed">{selected.descricao}</p>
-            )}
-            {selected.preco_medio && (
-              <p className="text-sm font-semibold text-ink-900 dark:text-white mb-4">
-                A partir de <span className="text-teal-600 dark:text-teal-400">R$ {Number(selected.preco_medio).toFixed(2)}</span>
-              </p>
-            )}
-            {selected.avaliacao && (
-              <p className="text-sm font-semibold text-amber-500 mb-4">★ {Number(selected.avaliacao).toFixed(1)}</p>
-            )}
-            <Button className="w-full" onClick={() => setSoliciting(selected)}>
-              <Send size={14}/> Solicitar serviço
-            </Button>
-          </div>
-        )}
-
-        <div className="flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: '60vh' }}>
-          {loadingProviders ? (
-            <ProviderCardSkeleton/>
-          ) : providers.length === 0 ? (
-            <div className="text-center py-12 text-ink-500 dark:text-ink-600">
-              <MapPin size={32} className="mx-auto mb-3 text-ink-300 dark:text-ink-700"/>
-              <p className="text-sm font-medium">Nenhum prestador disponível em {radius}km agora</p>
-              <p className="text-xs mt-1">Aumente o raio ou aguarde prestadores ficarem online</p>
-            </div>
-          ) : (
-            providers.map(p => (
-              <button key={p.user_id}
-                onClick={() => {
-                  setSelected(p)
-                  setInfoOpen(p)
-                  if (mapRef.current) mapRef.current.panTo({ lat: p.latitude, lng: p.longitude })
-                }}
-                className={`text-left bg-white dark:bg-[#11222A] rounded-xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-md ${
-                  selected?.user_id === p.user_id ? 'border-teal-400' : 'border-ink-900/10 dark:border-white/10'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-teal-100 dark:bg-teal-400/15 grid place-items-center text-teal-700 dark:text-teal-300 font-bold text-sm flex-shrink-0">
-                    {p.foto_url
-                      ? <img src={p.foto_url} alt={p.nome} className="w-full h-full rounded-full object-cover"/>
-                      : p.nome?.[0]?.toUpperCase() || '?'
-                    }
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-ink-900 dark:text-white text-sm truncate">{p.nome}</p>
-                    <p className="text-xs text-ink-500 dark:text-ink-600 truncate">{p.categoria}</p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    {p.preco_medio && (
-                      <p className="text-xs font-bold text-teal-600 dark:text-teal-400">
-                        R$ {Number(p.preco_medio).toFixed(0)}
-                      </p>
-                    )}
-                    {p.avaliacao && (
-                      <p className="text-xs text-amber-500">★ {Number(p.avaliacao).toFixed(1)}</p>
-                    )}
-                  </div>
-                </div>
-              </button>
-            ))
+          {quickCallOpen && (
+            <QuickCallPanel
+              userLocation={userLocation}
+              clientId={profile?.id}
+              categorias={categorias}
+              onClose={() => setQuickCallOpen(false)}
+            />
           )}
-        </div>
-      </div>
-
-      {sent && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-ink-900 dark:bg-white text-white dark:text-ink-900 px-6 py-3 rounded-full text-sm font-semibold shadow-xl z-50 flex items-center gap-2 whitespace-nowrap">
-          <span className="w-5 h-5 rounded-full bg-teal-400 grid place-items-center text-ink-900 text-xs">✓</span>
-          Proposta enviada! O prestador irá responder em breve.
         </div>
       )}
 
+      {/* Busca tab */}
+      {activeTab === 'busca' && (
+        <BuscaTab
+          userLocation={userLocation}
+          categorias={categorias}
+          onAgendar={provider => setSoliciting(provider)}
+        />
+      )}
+
+      {/* Shared modals */}
       {soliciting && (
         <SolicitacaoModal
           provider={soliciting}
@@ -460,17 +311,25 @@ function MapContent({ userLocation }) {
           onSent={handleSent}
         />
       )}
+
+      {sent && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] bg-[var(--teal-400)] text-white rounded-2xl px-5 py-3 shadow-xl text-sm font-medium">
+          Proposta enviada!
+        </div>
+      )}
     </div>
   )
 }
 
 export function ClientMap() {
   return (
-    <div className="min-h-screen bg-[#FAF8F3] dark:bg-[#08141A] flex flex-col">
+    <div className="h-screen flex flex-col bg-[#FAF8F3] dark:bg-[#08141A]">
       <Header/>
-      <LocationGate>
-        {(coords) => <MapContent userLocation={coords}/>}
-      </LocationGate>
+      <div className="flex-1 overflow-hidden">
+        <LocationGate>
+          {(coords) => <MapContent userLocation={coords}/>}
+        </LocationGate>
+      </div>
     </div>
   )
 }
