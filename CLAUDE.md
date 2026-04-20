@@ -50,11 +50,11 @@ Three distinct roles, all stored in `users.tipo` — routing enforced by `Privat
 
 ### Map (ClientMap)
 
-`/mapa` uses a two-component pattern:
-- `ClientMap` — shell with `<Header/>` + `<LocationGate>` render prop
-- `MapContent` — receives `userLocation: { lat, lng }` from LocationGate; manages providers, radius, realtime channel
+`/mapa` uses two tabs rendered inside `MapContent` (receives `userLocation` from `LocationGate`):
+- **Mapa tab** — fullscreen `GoogleMap`, floating radius pill (top-right), full-width amber "Chamada Rápida" button (bottom) → opens `QuickCallPanel` bottom sheet
+- **Busca tab** — `BuscaTab` component: provider list with collapsible filters (categoria, distância, valor/hora, ordenar)
 
-Provider fetch goes through Supabase RPC `get_nearby_providers(lat, lng, radius_km)` — a PostGIS `ST_DWithin` function (defined in `supabase/migrations/002_radius_rpc.sql`). Never fetch the `prestadores` table directly from the client map.
+Both tabs share `SolicitacaoModal` for scheduling. Provider fetch uses RPC `get_nearby_providers(lat, lng, radius_km)` — PostGIS `ST_DWithin` (defined in `supabase/migrations/002_radius_rpc.sql`). Never fetch `prestadores` directly from client map.
 
 `LocationGate` (`src/components/LocationGate.jsx`) blocks rendering until GPS permission is granted, showing loading/denied UIs. Uses `useGeolocation` hook which exposes `{ state, coords, request }` — states: `idle → requesting → granted | denied | unsupported`.
 
@@ -85,16 +85,18 @@ Supabase realtime channels are used in `ClientMap` (provider updates) and `Provi
 
 Migration `004_homefix_v3.sql` adds: `is_online`, `hourly_rate`, `last_location` on `prestadores`; `estimated_duration`, `total_price`, `type` on `solicitacoes`; `quick_calls` + `quick_call_offers` tables; updated PostGIS RPCs with filter params; `accept_quick_call_offer` atomic RPC.
 
-New components: `AgendaCalendar`, `FlashAlert`, `QuickCallPanel`. New hook: `useLocationSync`. New util: `src/lib/geo.js`.
+New components: `AgendaCalendar`, `FlashAlert`, `QuickCallPanel`, `BuscaTab`. New hook: `useLocationSync`. New util: `src/lib/geo.js`.
 
 Migration `005_admin_tipo.sql`: `is_admin` removed from `users`, `tipo='admin'` is now the admin identifier. `solicitacoes.status` now accepts `'cancelada'`. Frontend (`App.jsx`, `Header.jsx`, `LandingPage.jsx`) updated — no `is_admin` references remain.
 
 **⚠️ Pending DB apply:** `supabase/migrations/004_homefix_v3.sql` and `supabase/migrations/005_admin_tipo.sql` must be run in Supabase SQL Editor.
 
+Plan 2 complete: `AgendaCalendar` rebuilt as day-list with booking cards, status badges (amber/green), inline cancel + optimistic removal. `ClientDashboard` has cancel buttons on Propostas (pendente) and Histórico (aceita, extra confirm), plus gray `cancelada` badge. `ClientMap` restructured into Mapa tab (fullscreen map + floating radius pill + amber "Chamada Rápida" bottom sheet via `QuickCallPanel`) and Busca tab (`BuscaTab` with collapsible filters).
+
+### Map (ClientMap) — updated
+
+`/mapa` uses two tabs: **Mapa** (fullscreen `GoogleMap` + floating radius pill top-right + full-width amber Chamada Rápida button at bottom → opens `QuickCallPanel` bottom sheet with Uber-like status feed) and **Busca** (`BuscaTab` component — provider list with collapsible filters: categoria, distância, valor/hora, ordenar). Both tabs share `SolicitacaoModal` for scheduling.
+
 ## Pending Work
 
-**In progress:** UI fixes — `docs/superpowers/plans/2026-04-19-ui-fixes-agenda-cancel-map.md`
-
-1. AgendaCalendar full rebuild — day-list with booked appointment cards + inline cancel
-2. Cancellation flow — client can cancel from ClientDashboard (Propostas + Histórico tabs)
-3. ClientMap UX overhaul — two tabs: Mapa (fullscreen + Chamada Rápida bottom sheet) + Busca (provider list + filters)
+No pending frontend work. Both migrations still require manual application in Supabase SQL Editor.
