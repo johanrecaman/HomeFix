@@ -1,3 +1,6 @@
+-- ── 0. PostGIS extension (required for geography type) ───────────────────
+CREATE EXTENSION IF NOT EXISTS postgis;
+
 -- ── 1. Slots table ─────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.slots (
   id           uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -65,7 +68,6 @@ RETURNS TABLE (
   longitude       double precision,
   preco_medio     numeric,
   descricao       text,
-  foto_url        text,
   avaliacao       numeric,
   nome            text,
   user_foto_url   text,
@@ -87,7 +89,6 @@ AS $$
     p.longitude,
     p.preco_medio,
     p.descricao,
-    p.foto_url,
     p.avaliacao,
     u.nome,
     u.foto_url AS user_foto_url,

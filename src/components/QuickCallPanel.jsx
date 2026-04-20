@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Button } from './Button';
 import { Zap, X, Loader2, CheckCircle2 } from 'lucide-react';
@@ -11,12 +11,54 @@ export default function QuickCallPanel({ userLocation, clientId, categorias, onC
   const [feed, setFeed] = useState([]);
   const [accepting, setAccepting] = useState(null);
   const [createError, setCreateError] = useState('');
+  const [confirmedOffer, setConfirmedOffer] = useState(null);
+  const seenOffers = useRef(new Set());
+
+  async function handleNewOffer(offerId, prestadorId, estimatedDuration, totalPrice) {
+    if (seenOffers.current.has(offerId)) return;
+    seenOffers.current.add(offerId);
+
+    const { data: prov } = await supabase
+      .from('prestadores')
+      .select('avaliacao, categoria, users(nome)')
+      .eq('user_id', prestadorId)
+      .single();
+
+    const nome = prov?.users?.nome ?? 'Prestador';
+
+    setFeed(prev => [
+      ...prev,
+      { type: 'received', text: `${nome} recebeu sua solicitação` },
+      {
+        type: 'offer',
+        offerId,
+        prestadorNome: nome,
+        avaliacao: prov?.avaliacao,
+        estimated_duration: estimatedDuration,
+        total_price: totalPrice,
+      },
+    ]);
+  }
 
   useEffect(() => {
     if (!quickCallId) return;
 
-    const channel = supabase
-      .channel(`qc-offers:${quickCallId}`)
+    // Primary: broadcast channel (always works — provider sends this after insert)
+    const bch = supabase
+      .channel(`qc-b:${quickCallId}`)
+      .on('broadcast', { event: 'new-offer' }, ({ payload }) => {
+        handleNewOffer(
+          payload.id,
+          payload.prestador_id,
+          payload.estimated_duration,
+          payload.total_price,
+        );
+      })
+      .subscribe();
+
+    // Secondary: postgres_changes (works once quick_call_offers is in the publication)
+    const pgch = supabase
+      .channel(`qc-pg:${quickCallId}`)
       .on(
         'postgres_changes',
         {
@@ -25,33 +67,22 @@ export default function QuickCallPanel({ userLocation, clientId, categorias, onC
           table: 'quick_call_offers',
           filter: `quick_call_id=eq.${quickCallId}`,
         },
-        async ({ new: offer }) => {
-          const { data: prov } = await supabase
-            .from('prestadores')
-            .select('avaliacao, categoria, users(nome)')
-            .eq('user_id', offer.prestador_id)
-            .single();
-
-          const nome = prov?.users?.nome ?? 'Prestador';
-
-          setFeed(prev => [
-            ...prev,
-            { type: 'received', text: `${nome} recebeu sua solicitação` },
-            {
-              type: 'offer',
-              text: `${nome} enviou uma proposta`,
-              offerId: offer.id,
-              prestadorNome: nome,
-              avaliacao: prov?.avaliacao,
-              estimated_duration: offer.estimated_duration,
-              total_price: offer.total_price,
-            },
-          ]);
-        }
+        ({ new: offer }) => {
+          handleNewOffer(
+            offer.id,
+            offer.prestador_id,
+            offer.estimated_duration,
+            offer.total_price,
+          );
+        },
       )
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    return () => {
+      supabase.removeChannel(bch);
+      supabase.removeChannel(pgch);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quickCallId]);
 
   async function handleCreate() {
@@ -96,6 +127,7 @@ export default function QuickCallPanel({ userLocation, clientId, categorias, onC
   }
 
   async function handleAccept(offerId) {
+    const offerItem = feed.find(f => f.type === 'offer' && f.offerId === offerId);
     setAccepting(offerId);
     const { data, error } = await supabase.rpc('accept_quick_call_offer', {
       p_quick_call_id: quickCallId,
@@ -107,7 +139,8 @@ export default function QuickCallPanel({ userLocation, clientId, categorias, onC
       setAccepting(null);
       return;
     }
-    onClose();
+    setConfirmedOffer(offerItem);
+    setStep('confirmed');
   }
 
   async function handleCancel() {
@@ -138,14 +171,17 @@ export default function QuickCallPanel({ userLocation, clientId, categorias, onC
           <div className="flex items-center gap-2">
             <Zap size={18} className="text-amber-400" />
             <h3 className="font-semibold text-[var(--text-900)]">
-              {step === 'form' ? 'Chamada Rápida' : 'Chamada Rápida em andamento'}
+              {step === 'form' && 'Chamada Rápida'}
+              {step === 'live' && 'Chamada Rápida em andamento'}
+              {step === 'confirmed' && 'Serviço confirmado!'}
             </h3>
           </div>
-          {step === 'form' ? (
+          {step === 'form' && (
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
               <X size={18} />
             </button>
-          ) : (
+          )}
+          {step === 'live' && (
             <button
               onClick={handleCancel}
               className="text-xs text-red-500 border border-red-300 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg px-3 py-1.5 transition"
@@ -250,6 +286,47 @@ export default function QuickCallPanel({ userLocation, clientId, categorias, onC
 
                 return null;
               })}
+            </div>
+          )}
+
+          {step === 'confirmed' && confirmedOffer && (
+            <div className="flex flex-col items-center py-6 text-center space-y-4">
+              <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                <CheckCircle2 size={36} className="text-green-500" />
+              </div>
+              <div>
+                <p className="text-base font-bold text-[var(--text-900)]">
+                  {confirmedOffer.prestadorNome}
+                </p>
+                <p className="text-sm text-[var(--text-600)] mt-1">
+                  está a caminho
+                </p>
+              </div>
+              <div className="w-full rounded-xl bg-gray-50 dark:bg-gray-800/50 p-4 space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="text-[var(--text-600)]">Tempo estimado</span>
+                  <span className="font-semibold text-[var(--text-900)]">
+                    {confirmedOffer.estimated_duration} min
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-[var(--text-600)]">Valor</span>
+                  <span className="font-semibold text-[var(--teal-400)]">
+                    R$ {Number(confirmedOffer.total_price).toFixed(2)}
+                  </span>
+                </div>
+                {confirmedOffer.avaliacao != null && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--text-600)]">Avaliação</span>
+                    <span className="font-semibold text-amber-400">
+                      ★ {Number(confirmedOffer.avaliacao).toFixed(1)}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <Button onClick={onClose} className="w-full">
+                Fechar
+              </Button>
             </div>
           )}
         </div>

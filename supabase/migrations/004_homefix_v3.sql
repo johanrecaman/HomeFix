@@ -62,9 +62,11 @@ CREATE TABLE IF NOT EXISTS quick_call_offers (
 -- ============================================================
 ALTER TABLE quick_calls ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "clients_own_quick_calls" ON quick_calls;
 CREATE POLICY "clients_own_quick_calls" ON quick_calls
   FOR ALL USING (auth.uid() = cliente_id);
 
+DROP POLICY IF EXISTS "providers_read_open_quick_calls" ON quick_calls;
 CREATE POLICY "providers_read_open_quick_calls" ON quick_calls
   FOR SELECT USING (status = 'open');
 
@@ -73,9 +75,11 @@ CREATE POLICY "providers_read_open_quick_calls" ON quick_calls
 -- ============================================================
 ALTER TABLE quick_call_offers ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "providers_manage_own_offers" ON quick_call_offers;
 CREATE POLICY "providers_manage_own_offers" ON quick_call_offers
   FOR ALL USING (auth.uid() = prestador_id);
 
+DROP POLICY IF EXISTS "clients_read_offers_for_own_calls" ON quick_call_offers;
 CREATE POLICY "clients_read_offers_for_own_calls" ON quick_call_offers
   FOR SELECT USING (
     EXISTS (
@@ -88,12 +92,16 @@ CREATE POLICY "clients_read_offers_for_own_calls" ON quick_call_offers
 -- 7. RLS — tighten prestadores UPDATE (providers own row only)
 -- ============================================================
 DROP POLICY IF EXISTS "providers update own profile" ON prestadores;
+DROP POLICY IF EXISTS "providers_update_own_profile" ON prestadores;
 CREATE POLICY "providers_update_own_profile" ON prestadores
   FOR UPDATE USING (auth.uid() = user_id);
 
 -- ============================================================
 -- 8. get_nearby_providers — rewrite using PostGIS + new filters
+-- Drop the old integer-radius overload from 002 so only one version exists.
 -- ============================================================
+DROP FUNCTION IF EXISTS get_nearby_providers(double precision, double precision, integer);
+
 CREATE OR REPLACE FUNCTION get_nearby_providers(
   lat             double precision,
   lng             double precision,
@@ -278,3 +286,22 @@ BEGIN
   RETURN json_build_object('success', true, 'solicitacao_id', v_sol_id);
 END;
 $$;
+
+-- ============================================================
+-- 11. Enable realtime for quick_call tables
+-- ============================================================
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND tablename = 'quick_call_offers'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE quick_call_offers;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND tablename = 'quick_calls'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE quick_calls;
+  END IF;
+END $$;

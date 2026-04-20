@@ -227,55 +227,60 @@ function MapContent({ userLocation }) {
 
       {/* Mapa tab */}
       {activeTab === 'mapa' && (
-        <div className="relative flex-1">
-          {!isLoaded || loadError ? (
-            <MapSkeleton />
-          ) : (
-            <GoogleMap
-              mapContainerStyle={{ width: '100%', height: '100%' }}
-              center={userLocation}
-              zoom={13}
-              options={MAP_OPTIONS}
-              onLoad={onMapLoad}
-              onClick={() => setInfoOpen(null)}
-            >
-              {providers.map(p => (
-                <ProviderMarker
-                  key={p.user_id}
-                  provider={p}
-                  onClick={p => { setSelected(p); setInfoOpen(p) }}
-                  isSelected={selected?.user_id === p.user_id}
-                  isOnline={p.is_online ?? true}
-                />
-              ))}
-              {infoOpen && (
-                <ProviderInfoWindow
-                  provider={infoOpen}
-                  onClose={() => setInfoOpen(null)}
-                  onSolicitar={p => { setInfoOpen(null); setSoliciting(p) }}
-                />
+        <div className="flex flex-col h-full bg-[#FAF8F3] dark:bg-[#08141A]">
+          {/* Map — padded container with rounded corners */}
+          <div className="flex-1 min-h-0 px-4 pt-4 pb-2">
+            <div className="relative h-full rounded-2xl overflow-hidden shadow-lg border border-black/[0.06] dark:border-white/[0.06]">
+              {!isLoaded || loadError ? (
+                <MapSkeleton />
+              ) : (
+                <GoogleMap
+                  mapContainerStyle={{ width: '100%', height: '100%' }}
+                  center={userLocation}
+                  zoom={13}
+                  options={MAP_OPTIONS}
+                  onLoad={onMapLoad}
+                  onClick={() => setInfoOpen(null)}
+                >
+                  {providers.map(p => (
+                    <ProviderMarker
+                      key={p.user_id}
+                      provider={p}
+                      onClick={p => { setSelected(p); setInfoOpen(p) }}
+                      isSelected={selected?.user_id === p.user_id}
+                      isOnline={p.is_online ?? true}
+                    />
+                  ))}
+                  {infoOpen && (
+                    <ProviderInfoWindow
+                      provider={infoOpen}
+                      onClose={() => setInfoOpen(null)}
+                      onSolicitar={p => { setInfoOpen(null); setSoliciting(p) }}
+                    />
+                  )}
+                </GoogleMap>
               )}
-            </GoogleMap>
-          )}
 
-          {/* Floating radius pill */}
-          <div className="absolute top-3 right-3 z-10">
-            <select
-              value={radius}
-              onChange={e => setRadius(Number(e.target.value))}
-              className="bg-white/90 dark:bg-[#08141A]/90 backdrop-blur border border-gray-200 dark:border-gray-700 rounded-full px-3 py-1.5 text-sm shadow-md text-[var(--text-900)]"
-            >
-              {[2, 5, 10, 20, 50].map(r => (
-                <option key={r} value={r}>📍 {r} km</option>
-              ))}
-            </select>
+              {/* Radius pill — inside rounded map, above everything */}
+              <div className="absolute top-3 right-3 z-10">
+                <select
+                  value={radius}
+                  onChange={e => setRadius(Number(e.target.value))}
+                  className="bg-white/90 dark:bg-[#08141A]/90 backdrop-blur border border-gray-200 dark:border-gray-700 rounded-full px-3 py-1.5 text-sm shadow-md text-[var(--text-900)]"
+                >
+                  {[2, 5, 10, 20, 50].map(r => (
+                    <option key={r} value={r}>📍 {r} km</option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
 
-          {/* Full-width Chamada Rápida button */}
-          <div className="absolute bottom-0 left-0 right-0 p-4">
+          {/* Chamada Rápida — always visible below the map, never covered */}
+          <div className="px-4 py-4 shrink-0">
             <button
               onClick={() => setQuickCallOpen(true)}
-              className="w-full bg-amber-400 hover:bg-amber-500 active:bg-amber-600 text-white font-semibold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg transition"
+              className="w-full bg-teal-400 hover:bg-teal-500 active:bg-teal-600 text-ink-900 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all duration-150"
             >
               <Zap size={18} />
               Chamada Rápida
@@ -299,6 +304,7 @@ function MapContent({ userLocation }) {
           userLocation={userLocation}
           categorias={categorias}
           onAgendar={provider => setSoliciting(provider)}
+          onQuickCall={() => setQuickCallOpen(true)}
         />
       )}
 

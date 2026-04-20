@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { SlidersHorizontal, ChevronDown, Loader2, Search } from 'lucide-react';
+import { SlidersHorizontal, ChevronDown, Loader2, Search, Zap } from 'lucide-react';
 
-export default function BuscaTab({ userLocation, categorias, onAgendar }) {
+export default function BuscaTab({ userLocation, categorias, onAgendar, onQuickCall }) {
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -34,7 +34,9 @@ export default function BuscaTab({ userLocation, categorias, onAgendar }) {
   useEffect(() => { search(); }, [search]);
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden h-full">
+    <div className="flex flex-col h-full bg-white dark:bg-[#08141A]">
+
+      {/* Filters */}
       <div className="bg-white dark:bg-[#08141A] border-b border-gray-200 dark:border-gray-700 shrink-0">
         <button
           onClick={() => setFiltersOpen(f => !f)}
@@ -44,9 +46,7 @@ export default function BuscaTab({ userLocation, categorias, onAgendar }) {
             <SlidersHorizontal size={15} />
             Filtros
             {(filterCategoria || minRate || maxRate || radius !== 10) && (
-              <span className="text-xs bg-[var(--teal-400)] text-white rounded-full px-1.5 py-0.5">
-                ●
-              </span>
+              <span className="text-xs bg-[var(--teal-400)] text-white rounded-full px-1.5 py-0.5">●</span>
             )}
           </div>
           <ChevronDown
@@ -113,6 +113,7 @@ export default function BuscaTab({ userLocation, categorias, onAgendar }) {
         )}
       </div>
 
+      {/* Provider list */}
       <div className="flex-1 overflow-y-auto">
         {loading && (
           <div className="flex justify-center py-12">
@@ -158,16 +159,16 @@ export default function BuscaTab({ userLocation, categorias, onAgendar }) {
                     {p.categoria}
                     {p.distance_km != null && ` · ${Number(p.distance_km).toFixed(1)} km`}
                   </p>
-                  {p.hourly_rate != null && (
+                  {(p.hourly_rate ?? p.preco_medio) != null && (
                     <p className="text-xs font-medium text-[var(--teal-400)] mt-0.5">
-                      R$ {Number(p.hourly_rate).toFixed(0)}/h
+                      R$ {Number(p.hourly_rate ?? p.preco_medio).toFixed(0)}/h
                     </p>
                   )}
                 </div>
 
                 <button
                   onClick={() => onAgendar(p)}
-                  className="shrink-0 text-xs font-semibold bg-[var(--teal-400)] hover:opacity-90 text-white rounded-xl px-3 py-2 transition"
+                  className="shrink-0 text-xs font-semibold bg-[var(--teal-400)] hover:opacity-90 text-ink-900 rounded-xl px-3 py-2 transition"
                 >
                   Agendar
                 </button>
@@ -175,6 +176,17 @@ export default function BuscaTab({ userLocation, categorias, onAgendar }) {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Chamada Rápida */}
+      <div className="shrink-0 px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-[#08141A]">
+        <button
+          onClick={onQuickCall}
+          className="w-full bg-teal-400 hover:bg-teal-500 active:bg-teal-600 text-ink-900 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all duration-150"
+        >
+          <Zap size={18} />
+          Chamada Rápida
+        </button>
       </div>
     </div>
   );

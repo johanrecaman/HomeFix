@@ -48,14 +48,37 @@ export default function FlashAlert({ prestador }) {
         : 0;
 
     setSubmitting(true);
-    const { error } = await supabase.from('quick_call_offers').insert({
-      quick_call_id: alert.quick_call_id,
-      prestador_id: prestador.user_id,
-      estimated_duration: mins,
-      total_price: totalPrice,
-    });
+    const { data: offerData, error } = await supabase
+      .from('quick_call_offers')
+      .insert({
+        quick_call_id: alert.quick_call_id,
+        prestador_id: prestador.user_id,
+        estimated_duration: mins,
+        total_price: totalPrice,
+      })
+      .select('id')
+      .single();
     setSubmitting(false);
-    if (!error) {
+    if (!error && offerData) {
+      // Broadcast to client so they receive the offer even if postgres_changes
+      // publication isn't configured for quick_call_offers.
+      const bch = supabase.channel(`qc-b:${alert.quick_call_id}`);
+      bch.subscribe(status => {
+        if (status === 'SUBSCRIBED') {
+          bch.send({
+            type: 'broadcast',
+            event: 'new-offer',
+            payload: {
+              id: offerData.id,
+              quick_call_id: alert.quick_call_id,
+              prestador_id: prestador.user_id,
+              estimated_duration: mins,
+              total_price: totalPrice,
+            },
+          });
+          setTimeout(() => supabase.removeChannel(bch), 3000);
+        }
+      });
       setDone(true);
       setAlert(null);
     }
